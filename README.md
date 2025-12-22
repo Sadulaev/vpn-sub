@@ -83,35 +83,40 @@ ROBOKASSA_TEST_MODE=true
 GOOGLE_SHEETS_ID=your_spreadsheet_id
 GOOGLE_SA_CLIENT_EMAIL=your_service_account_email
 GOOGLE_SA_PRIVATE_KEY=your_private_key
-
-# VPN Servers Configuration (JSON array)
-VPN_SERVERS_CONFIG=[{...}]
 ```
 
 ## Конфигурация VPN-серверов
 
-VPN_SERVERS_CONFIG — JSON массив с конфигурацией серверов:
+Конфигурация хранится в файле `data/servers.json`:
+
+```bash
+cp data/servers.example.json data/servers.json
+```
+
+Формат файла:
 
 ```json
-[
-  {
-    "id": "server1",
-    "apiUrl": "https://panel.example.com",
-    "webBasePath": "panel",
-    "username": "admin",
-    "password": "admin",
-    "publicHost": "vpn.example.com",
-    "publicPort": 443,
-    "usersLimit": 100,
-    "security": "reality",
-    "pbk": "public_key",
-    "fp": "chrome",
-    "sni": "sni.example.com",
-    "sid": "short_id",
-    "spx": "%2F",
-    "enabled": true
-  }
-]
+{
+  "servers": [
+    {
+      "id": "server1",
+      "enabled": true,
+      "apiUrl": "https://panel.example.com",
+      "webBasePath": "panel",
+      "username": "admin",
+      "password": "admin",
+      "publicHost": "vpn.example.com",
+      "publicPort": 443,
+      "usersLimit": 100,
+      "security": "reality",
+      "pbk": "public_key",
+      "fp": "chrome",
+      "sni": "sni.example.com",
+      "sid": "short_id",
+      "spx": "%2F"
+    }
+  ]
+}
 ```
 
 ## Endpoints

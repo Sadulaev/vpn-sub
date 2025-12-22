@@ -2,14 +2,18 @@
 node_modules/
 package-lock.json
 
+# Config with secrets (keep servers.example.json as template)
+data/servers.json
+
 # Build
 dist/
 build/
 
 # Environment
 .env
-.env.local
-.env.*.local
+.env.*
+*.env
+env.prod*
 
 # Sessions (Telegraf local sessions)
 sessions/
