@@ -263,6 +263,73 @@ export class VpnServersService {
   }
 
   /**
+   * Удалить просроченных клиентов из inbound
+   */
+  private async deleteDepletedClients(
+    server: VpnServerConfig,
+    inboundId: number,
+    cookie: string,
+  ): Promise<boolean> {
+    try {
+      const url = new URL(
+        `/${server.webBasePath}/panel/api/inbounds/delDepletedClients/${inboundId}`,
+        server.apiUrl,
+      ).toString();
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { Cookie: cookie },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Delete depleted clients failed with status: ${response.status}`);
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to delete depleted clients from ${server.id}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Удалить все просроченные подписки со всех серверов
+   */
+  async deleteAllExpiredClients(): Promise<{ success: string[]; failed: string[] }> {
+    const servers = this.getServers();
+    const success: string[] = [];
+    const failed: string[] = [];
+
+    await Promise.all(
+      servers.map(async (server) => {
+        const cookie = await this.getLoginCookies(server);
+        if (!cookie) {
+          failed.push(`${server.id}: ошибка авторизации`);
+          return;
+        }
+
+        const inbounds = await this.getInbounds(server, cookie);
+        if (!inbounds?.obj) {
+          failed.push(`${server.id}: не удалось получить inbounds`);
+          return;
+        }
+
+        for (const inbound of inbounds.obj) {
+          const deleted = await this.deleteDepletedClients(server, inbound.id, cookie);
+          if (deleted) {
+            success.push(`${server.id}/${inbound.remark}`);
+          } else {
+            failed.push(`${server.id}/${inbound.remark}`);
+          }
+        }
+      }),
+    );
+
+    this.logger.log(`Deleted expired clients: ${success.length} success, ${failed.length} failed`);
+    return { success, failed };
+  }
+
+  /**
    * Получить статистику нагрузки серверов (для админки)
    */
   async getLoadsStatistics(): Promise<Record<string, Record<string, number>>> {

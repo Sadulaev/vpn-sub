@@ -37,6 +37,7 @@ export class AdminBotService {
         { text: 'Отправить сообщение всем ✉️', callback_data: AdminCallbacks.BroadcastStart },
         { text: 'Отправить сообщение одному ✉️', callback_data: AdminCallbacks.BroadcastToOne },
         { text: 'Все серверы ℹ️', callback_data: AdminCallbacks.ServersList },
+        { text: 'Удалить просроченные 🗑️', callback_data: AdminCallbacks.DeleteExpiredClients },
         { text: 'Получить ключ 🔑', callback_data: AdminCallbacks.GenerateKeyMenu },
         {
           text: botState.enabled ? 'Выключить бота 🔴' : 'Включить бота 🟢',
@@ -261,6 +262,42 @@ export class AdminBotService {
     }
 
     await this.showMainMenu(ctx);
+  }
+
+  /**
+   * Удалить все просроченные подписки
+   */
+  async deleteExpiredClients(ctx: CallbackContext): Promise<void> {
+    await ctx.answerCbQuery();
+    await ctx.reply('🗑️ Удаляю просроченные подписки...');
+
+    const result = await this.vpnServersService.deleteAllExpiredClients();
+
+    const buttons = Markup.inlineKeyboard([
+      { text: '⬅️ Меню', callback_data: AdminCallbacks.Menu },
+    ]);
+
+    let message = '🗑️ <b>Удаление просроченных подписок</b>\n\n';
+
+    if (result.success.length > 0) {
+      message += `✅ <b>Успешно:</b>\n`;
+      message += result.success.map((s) => `  • ${s}`).join('\n');
+      message += '\n\n';
+    }
+
+    if (result.failed.length > 0) {
+      message += `❌ <b>Ошибки:</b>\n`;
+      message += result.failed.map((f) => `  • ${f}`).join('\n');
+    }
+
+    if (result.success.length === 0 && result.failed.length === 0) {
+      message += '📭 Нет серверов для обработки';
+    }
+
+    await ctx.reply(message, {
+      parse_mode: 'HTML',
+      reply_markup: buttons.reply_markup,
+    });
   }
 
   private getPeriodLabel(months: number): string {
