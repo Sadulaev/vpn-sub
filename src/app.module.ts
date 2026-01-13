@@ -3,17 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import * as LocalSession from 'telegraf-session-local';
-
-// Конфигурации
-import {
-  appConfig,
-  databaseConfig,
-  telegramConfig,
-  robokassaConfig,
-  googleSheetsConfig,
-  vpnServersConfig,
-  subscriptionPlansConfig,
-} from '@common/config';
+import configuration from './config';
 
 // Модули
 import { DatabaseModule } from '@database/database.module';
@@ -35,39 +25,23 @@ const adminBotSessions = new LocalSession({ database: 'sessions/admin_bot.json' 
     // Конфигурация
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [
-        appConfig,
-        databaseConfig,
-        telegramConfig,
-        robokassaConfig,
-        googleSheetsConfig,
-        vpnServersConfig,
-        subscriptionPlansConfig,
-      ],
+      load: [configuration],
     }),
 
     // Пользовательский бот
-    TelegrafModule.forRootAsync({
+    TelegrafModule.forRoot({
       botName: 'userBot',
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        token: configService.get<string>('telegram.userBotToken') || '',
-        middlewares: [userBotSessions.middleware()],
-        include: [UserBotModule],
-      }),
+      token: configuration().telegram.userBotToken,
+      middlewares: [userBotSessions.middleware()],
+      include: [UserBotModule],
     }),
 
     // Админ-бот
-    TelegrafModule.forRootAsync({
+    TelegrafModule.forRoot({
       botName: 'adminBot',
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        token: configService.get<string>('telegram.adminBotToken') || '',
-        middlewares: [adminBotSessions.middleware()],
-        include: [AdminBotModule],
-      }),
+      token: configuration().telegram.adminBotToken,
+      middlewares: [adminBotSessions.middleware()],
+      include: [AdminBotModule],
     }),
 
     // База данных
