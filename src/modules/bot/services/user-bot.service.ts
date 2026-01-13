@@ -1,16 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
-import { Markup } from 'telegraf';
-import { User } from '@database/entities';
-import { PaymentsService, RobokassaService } from '@modules/payments';
-import { GoogleSheetsService } from '@modules/google-sheets';
-import { BotCallbacks } from '../constants/callbacks';
-import { BotMessages } from '../constants/messages';
-import { MessageContext, CallbackContext } from '../types/context';
-import { SubscriptionPlan } from '@common/config';
-import { formatDate } from '../utils/format-date';
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { ConfigService } from "@nestjs/config";
+import { Markup } from "telegraf";
+import { User } from "@database/entities";
+import { PaymentsService, RobokassaService } from "@modules/payments";
+import { GoogleSheetsService } from "@modules/google-sheets";
+import { BotCallbacks } from "../constants/callbacks";
+import { BotMessages } from "../constants/messages";
+import { MessageContext, CallbackContext } from "../types/context";
+import { SubscriptionPlan } from "@common/config";
+import { formatDate } from "../utils/format-date";
 
 @Injectable()
 export class UserBotService {
@@ -22,23 +22,26 @@ export class UserBotService {
     private readonly configService: ConfigService,
     private readonly paymentsService: PaymentsService,
     private readonly robokassaService: RobokassaService,
-    private readonly googleSheetsService: GoogleSheetsService,
+    private readonly googleSheetsService: GoogleSheetsService
   ) {}
 
   /**
    * Получить планы подписок из конфигурации
    */
   private getPlans(): SubscriptionPlan[] {
-    return this.configService.get<SubscriptionPlan[]>('subscriptionPlans.plans') || [];
+    return (
+      this.configService.get<SubscriptionPlan[]>("subscriptionPlans.plans") ||
+      []
+    );
   }
 
   /**
    * Обработка команды /start
    */
   async handleStart(ctx: MessageContext): Promise<void> {
-    const telegramId = ctx.message.from.id.toString();
-    const firstName = ctx.message.from.first_name || '';
-    const username = ctx.message.from.username || '';
+    const telegramId = ctx.message.from?.id.toString();
+    const firstName = ctx.message.from?.first_name || "";
+    const username = ctx.message.from?.username || "";
 
     // Сохраняем/обновляем пользователя
     let user = await this.userRepository.findOne({ where: { telegramId } });
@@ -52,14 +55,16 @@ export class UserBotService {
       await this.userRepository.save(user);
 
       // Записываем в Google Sheets
-      try {
-        await this.googleSheetsService.appendRow('Лист3', [
-          telegramId,
-          firstName,
-          username,
-        ]);
-      } catch (error) {
-        this.logger.error('Failed to save user to Google Sheets:', error);
+      if (telegramId) {
+        try {
+          await this.googleSheetsService.appendRow("Лист3", [
+            telegramId,
+            firstName,
+            username,
+          ]);
+        } catch (error) {
+          this.logger.error("Failed to save user to Google Sheets:", error);
+        }
       }
     }
 
@@ -72,21 +77,27 @@ export class UserBotService {
   async sendMainMenu(ctx: MessageContext | CallbackContext): Promise<void> {
     const buttons = Markup.inlineKeyboard(
       [
-        { text: 'Приобрести VPN 🛜', callback_data: BotCallbacks.Subscriptions },
-        { text: 'Мои ключи 🔑', callback_data: BotCallbacks.MyKeys },
-        { text: 'Инструкция установки 📍', callback_data: BotCallbacks.Instructions },
-        { text: 'Тех. поддержка ⚠️', url: 'https://t.me/hyper_vpn_help' },
+        {
+          text: "Приобрести VPN 🛜",
+          callback_data: BotCallbacks.Subscriptions,
+        },
+        { text: "Мои ключи 🔑", callback_data: BotCallbacks.MyKeys },
+        {
+          text: "Инструкция установки 📍",
+          callback_data: BotCallbacks.Instructions,
+        },
+        { text: "Тех. поддержка ⚠️", url: "https://t.me/hyper_vpn_help" },
       ],
-      { columns: 1 },
+      { columns: 1 }
     );
 
     await ctx.replyWithPhoto(
-      { source: './assets/hyper-vpn-menu.jpg' },
+      { source: "./assets/hyper-vpn-menu.jpg" },
       {
         caption: BotMessages.welcome,
-        parse_mode: 'HTML',
+        parse_mode: "HTML",
         reply_markup: buttons.reply_markup,
-      },
+      }
     );
   }
 
@@ -103,8 +114,8 @@ export class UserBotService {
     }));
 
     const buttons = Markup.inlineKeyboard(
-      [...planButtons, { text: '⬅️ Назад', callback_data: BotCallbacks.Menu }],
-      { columns: 1 },
+      [...planButtons, { text: "⬅️ Назад", callback_data: BotCallbacks.Menu }],
+      { columns: 1 }
     );
 
     try {
@@ -112,12 +123,12 @@ export class UserBotService {
     } catch {}
 
     await ctx.replyWithPhoto(
-      { source: './assets/hyper-vpn-subscriptions.jpg' },
+      { source: "./assets/hyper-vpn-subscriptions.jpg" },
       {
         caption: BotMessages.subscriptions,
-        parse_mode: 'HTML',
+        parse_mode: "HTML",
         reply_markup: buttons.reply_markup,
-      },
+      }
     );
   }
 
@@ -131,13 +142,13 @@ export class UserBotService {
     const plan = plans.find((p) => p.months === months);
 
     if (!plan) {
-      await ctx.reply('Тариф не найден');
+      await ctx.reply("Тариф не найден");
       return;
     }
 
     const telegramId = ctx.callbackQuery.from.id.toString();
-    const firstName = ctx.callbackQuery.from.first_name || '';
-    const username = ctx.callbackQuery.from.username || '';
+    const firstName = ctx.callbackQuery.from.first_name || "";
+    const username = ctx.callbackQuery.from.username || "";
 
     // Создаём сессию платежа
     const session = await this.paymentsService.createSession({
@@ -158,8 +169,8 @@ export class UserBotService {
     });
 
     const buttons = Markup.inlineKeyboard([
-      { text: '💳 Оплатить', url: paymentUrl },
-      { text: '⬅️ Назад', callback_data: BotCallbacks.Subscriptions },
+      { text: "💳 Оплатить", url: paymentUrl },
+      { text: "⬅️ Назад", callback_data: BotCallbacks.Subscriptions },
     ]);
 
     // Выбираем картинку в зависимости от периода
@@ -174,7 +185,7 @@ export class UserBotService {
       {
         caption: BotMessages.paymentLink,
         reply_markup: buttons.reply_markup,
-      },
+      }
     );
   }
 
@@ -186,13 +197,13 @@ export class UserBotService {
 
     const buttons = Markup.inlineKeyboard(
       [
-        { text: 'iPhone ', callback_data: BotCallbacks.InstructionsIphone },
-        { text: 'Android 🤖', callback_data: BotCallbacks.InstructionsAndroid },
-        { text: 'Компьютер 💻', callback_data: BotCallbacks.InstructionsPc },
-        { text: 'TV 📺', callback_data: BotCallbacks.InstructionsTv },
-        { text: '⬅️ Назад', callback_data: BotCallbacks.Menu },
+        { text: "iPhone ", callback_data: BotCallbacks.InstructionsIphone },
+        { text: "Android 🤖", callback_data: BotCallbacks.InstructionsAndroid },
+        { text: "Компьютер 💻", callback_data: BotCallbacks.InstructionsPc },
+        { text: "TV 📺", callback_data: BotCallbacks.InstructionsTv },
+        { text: "⬅️ Назад", callback_data: BotCallbacks.Menu },
       ],
-      { columns: 1 },
+      { columns: 1 }
     );
 
     try {
@@ -200,12 +211,12 @@ export class UserBotService {
     } catch {}
 
     await ctx.replyWithPhoto(
-      { source: './assets/hyper-vpn-instructions.jpg' },
+      { source: "./assets/hyper-vpn-instructions.jpg" },
       {
         caption: BotMessages.instructions,
-        parse_mode: 'HTML',
+        parse_mode: "HTML",
         reply_markup: buttons.reply_markup,
-      },
+      }
     );
   }
 
@@ -214,7 +225,7 @@ export class UserBotService {
    */
   async showPlatformInstructions(
     ctx: CallbackContext,
-    platform: 'iphone' | 'android' | 'pc' | 'tv',
+    platform: "iphone" | "android" | "pc" | "tv"
   ): Promise<void> {
     await ctx.answerCbQuery();
 
@@ -227,10 +238,10 @@ export class UserBotService {
 
     const buttons = Markup.inlineKeyboard(
       [
-        { text: '🏠 Меню', callback_data: BotCallbacks.Menu },
-        { text: '⬅️ Назад', callback_data: BotCallbacks.Instructions },
+        { text: "🏠 Меню", callback_data: BotCallbacks.Menu },
+        { text: "⬅️ Назад", callback_data: BotCallbacks.Instructions },
       ],
-      { columns: 2 },
+      { columns: 2 }
     );
 
     try {
@@ -238,12 +249,12 @@ export class UserBotService {
     } catch {}
 
     await ctx.replyWithPhoto(
-      { source: './assets/hyper-vpn-instructions.jpg' },
+      { source: "./assets/hyper-vpn-instructions.jpg" },
       {
         caption: messages[platform],
-        parse_mode: 'HTML',
+        parse_mode: "HTML",
         reply_markup: buttons.reply_markup,
-      },
+      }
     );
   }
 
@@ -254,10 +265,11 @@ export class UserBotService {
     await ctx.answerCbQuery();
 
     const telegramId = ctx.callbackQuery.from.id.toString();
-    const sessions = await this.paymentsService.getActiveKeysByTelegramId(telegramId);
+    const sessions =
+      await this.paymentsService.getActiveKeysByTelegramId(telegramId);
 
     const buttons = Markup.inlineKeyboard([
-      { text: '⬅️ Назад', callback_data: BotCallbacks.Menu },
+      { text: "⬅️ Назад", callback_data: BotCallbacks.Menu },
     ]);
 
     let message: string;
@@ -270,7 +282,7 @@ export class UserBotService {
           const createdAt = formatDate(session.createdAt);
           const expiresAt = session.keyExpiresAt
             ? formatDate(session.keyExpiresAt)
-            : 'Неизвестно';
+            : "Неизвестно";
 
           return `
 <b>Ключ ${index + 1}</b>
@@ -278,7 +290,7 @@ export class UserBotService {
 📅 Создан: ${createdAt}
 ⏳ Действует до: ${expiresAt}`;
         })
-        .join('\n');
+        .join("\n");
 
       message = `${BotMessages.activeKeysHeader}\n${keysText}`;
     }
@@ -288,19 +300,18 @@ export class UserBotService {
     } catch {}
 
     await ctx.reply(message, {
-      parse_mode: 'HTML',
+      parse_mode: "HTML",
       reply_markup: buttons.reply_markup,
     });
   }
 
   private getImageForPeriod(months: number): string {
     const images: Record<number, string> = {
-      1: './assets/hyper-vpn-one-m.jpg',
-      3: './assets/hyper-vpn-three-m.jpg',
-      6: './assets/hyper-vpn-six-m.jpg',
-      12: './assets/hyper-vpn-twelwe-m.jpg',
+      1: "./assets/hyper-vpn-one-m.jpg",
+      3: "./assets/hyper-vpn-three-m.jpg",
+      6: "./assets/hyper-vpn-six-m.jpg",
+      12: "./assets/hyper-vpn-twelwe-m.jpg",
     };
-    return images[months] || './assets/hyper-vpn-menu.jpg';
+    return images[months] || "./assets/hyper-vpn-menu.jpg";
   }
 }
-

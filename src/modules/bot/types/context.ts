@@ -1,5 +1,9 @@
-import { Context } from 'telegraf';
-import { Update, Message, CallbackQuery } from 'telegraf/typings/core/types/typegram';
+import { Context } from "telegraf";
+import {
+  Update,
+  Message,
+  CallbackQuery,
+} from "telegraf/typings/core/types/typegram";
 
 export interface SessionData {
   status?: string;
@@ -9,26 +13,14 @@ export interface SessionData {
 
 export interface CustomContext extends Context {
   session: SessionData;
-  update: Update.CallbackQueryUpdate | Update.MessageUpdate;
 }
 
-export interface MessageContext extends CustomContext {
-  message: Message.TextMessage & {
-    from: {
-      id: number;
-      first_name?: string;
-      username?: string;
-    };
-  };
-}
+export type MessageContext = Omit<CustomContext, "message"> & {
+  update: Update.MessageUpdate;
+  message: Message.TextMessage;
+};
 
-export interface CallbackContext extends CustomContext {
-  callbackQuery: CallbackQuery.DataQuery & {
-    from: {
-      id: number;
-      first_name?: string;
-      username?: string;
-    };
-  };
-}
-
+export type CallbackContext = Omit<CustomContext, "callbackQuery"> & {
+  update: Update.CallbackQueryUpdate;
+  callbackQuery: CallbackQuery.DataQuery;
+};
