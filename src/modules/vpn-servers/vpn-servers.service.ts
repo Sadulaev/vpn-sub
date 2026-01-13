@@ -6,6 +6,8 @@ import {
   VlessKeyResult,
   InboundsResponse,
   InboundClient,
+  ExpiringClient,
+  InboundSettings,
 } from './interfaces/vpn-server.interface';
 import * as crypto from 'crypto';
 
@@ -327,6 +329,57 @@ export class VpnServersService {
 
     this.logger.log(`Deleted expired clients: ${success.length} success, ${failed.length} failed`);
     return { success, failed };
+  }
+
+  /**
+   * Получить клиентов с истекающей подпиской (менее 24 часов)
+   */
+  async getExpiringClients(hoursThreshold = 24): Promise<ExpiringClient[]> {
+    const servers = this.getServers();
+    const expiringClients: ExpiringClient[] = [];
+    const now = Date.now();
+    const thresholdMs = hoursThreshold * 60 * 60 * 1000;
+
+    await Promise.all(
+      servers.map(async (server) => {
+        const cookie = await this.getLoginCookies(server);
+        if (!cookie) return;
+
+        const inbounds = await this.getInbounds(server, cookie);
+        if (!inbounds?.obj) return;
+
+        for (const inbound of inbounds.obj) {
+          // Парсим settings чтобы получить clients с их id
+          let clients: InboundClient[] = [];
+          try {
+            const settings: InboundSettings = JSON.parse(inbound.settings);
+            clients = settings.clients || [];
+          } catch {
+            continue;
+          }
+
+          for (const client of clients) {
+            // Проверяем что expiryTime > 0 (не бессрочный) и истекает в течение threshold
+            if (
+              client.expiryTime > 0 &&
+              client.expiryTime > now &&
+              client.expiryTime - now < thresholdMs
+            ) {
+              expiringClients.push({
+                clientId: client.id,
+                email: client.email,
+                expiryTime: client.expiryTime,
+                serverId: server.id,
+                inboundId: inbound.id,
+              });
+            }
+          }
+        }
+      }),
+    );
+
+    this.logger.log(`Found ${expiringClients.length} expiring clients`);
+    return expiringClients;
   }
 
   /**

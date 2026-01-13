@@ -78,6 +78,11 @@ export class AdminBotUpdate {
     await this.adminBotService.deleteExpiredClients(ctx);
   }
 
+  @Action(AdminCallbacks.NotifyExpiringClients)
+  async onNotifyExpiring(@Ctx() ctx: CallbackContext): Promise<void> {
+    await this.adminBotService.notifyExpiringClients(ctx);
+  }
+
   /**
    * Обработка текстовых сообщений в зависимости от статуса сессии
    */

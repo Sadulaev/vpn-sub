@@ -19,14 +19,38 @@ export interface InboundClient {
   enable: boolean;
 }
 
+export interface ClientStats {
+  id: number;
+  inboundId: number;
+  enable: boolean;
+  email: string;
+  up: number;
+  down: number;
+  expiryTime: number;
+  total: number;
+}
+
+export interface InboundSettings {
+  clients: InboundClient[];
+}
+
 export interface Inbound {
   id: number;
   remark: string;
-  clientStats?: { id: string }[];
+  settings: string; // JSON string с InboundSettings
+  clientStats?: ClientStats[];
 }
 
 export interface InboundsResponse {
   success: boolean;
   obj: Inbound[];
+}
+
+export interface ExpiringClient {
+  clientId: string;
+  email: string;
+  expiryTime: number;
+  serverId: string;
+  inboundId: number;
 }
 

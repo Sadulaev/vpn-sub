@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Markup } from 'telegraf';
 import { VpnServersService } from '@modules/vpn-servers';
+import { PaymentsService } from '@modules/payments';
 import { BotStateService } from './bot-state.service';
 import { BroadcastService } from './broadcast.service';
 import { AdminCallbacks } from '@modules/bot/constants/callbacks';
@@ -14,6 +15,7 @@ export class AdminBotService {
 
   constructor(
     private readonly vpnServersService: VpnServersService,
+    private readonly paymentsService: PaymentsService,
     private readonly botStateService: BotStateService,
     private readonly broadcastService: BroadcastService,
   ) {}
@@ -38,6 +40,7 @@ export class AdminBotService {
         { text: 'Отправить сообщение одному ✉️', callback_data: AdminCallbacks.BroadcastToOne },
         { text: 'Все серверы ℹ️', callback_data: AdminCallbacks.ServersList },
         { text: 'Удалить просроченные 🗑️', callback_data: AdminCallbacks.DeleteExpiredClients },
+        { text: 'Уведомить об истечении ⏰', callback_data: AdminCallbacks.NotifyExpiringClients },
         { text: 'Получить ключ 🔑', callback_data: AdminCallbacks.GenerateKeyMenu },
         {
           text: botState.enabled ? 'Выключить бота 🔴' : 'Включить бота 🟢',
@@ -300,10 +303,97 @@ export class AdminBotService {
     });
   }
 
+  /**
+   * Уведомить пользователей об истечении подписки
+   */
+  async notifyExpiringClients(ctx: CallbackContext): Promise<void> {
+    await ctx.answerCbQuery();
+    await ctx.reply('⏰ Ищу пользователей с истекающей подпиской...');
+
+    // Получаем клиентов с истекающей подпиской (менее 24 часов)
+    const expiringClients = await this.vpnServersService.getExpiringClients(24);
+
+    if (expiringClients.length === 0) {
+      const buttons = Markup.inlineKeyboard([
+        { text: '⬅️ Меню', callback_data: AdminCallbacks.Menu },
+      ]);
+      await ctx.reply('✅ Нет пользователей с истекающей подпиской в ближайшие 24 часа', {
+        reply_markup: buttons.reply_markup,
+      });
+      return;
+    }
+
+    // Находим связанные платёжные сессии
+    const clientIds = expiringClients.map((c) => c.clientId);
+    const sessionsMap = await this.paymentsService.findByClientIds(clientIds);
+
+    let notified = 0;
+    let notFound = 0;
+    let failed = 0;
+
+    for (const client of expiringClients) {
+      const session = sessionsMap.get(client.clientId);
+
+      if (!session) {
+        notFound++;
+        continue;
+      }
+
+      const hoursLeft = Math.round((client.expiryTime - Date.now()) / (1000 * 60 * 60));
+
+      const message = `⏰ <b>Ваша подписка HyperVPN скоро истекает!</b>
+
+Осталось менее <b>${hoursLeft} ${this.getHoursLabel(hoursLeft)}</b>.
+
+Чтобы продолжить пользоваться VPN, продлите подписку:
+👉 /start
+
+💬 Вопросы? Пишите: @hyper_vpn_help`;
+
+      const sent = await this.broadcastService.sendToOne(session.telegramId, message);
+
+      if (sent) {
+        notified++;
+      } else {
+        failed++;
+      }
+
+      // Небольшая задержка между сообщениями
+      await this.delay(100);
+    }
+
+    const buttons = Markup.inlineKeyboard([
+      { text: '⬅️ Меню', callback_data: AdminCallbacks.Menu },
+    ]);
+
+    await ctx.reply(
+      `⏰ <b>Уведомление об истечении подписки</b>\n\n` +
+        `📊 Результат:\n` +
+        `• Найдено истекающих: ${expiringClients.length}\n` +
+        `• Уведомлено: ${notified}\n` +
+        `• Не найдены в БД: ${notFound}\n` +
+        `• Ошибки отправки: ${failed}`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: buttons.reply_markup,
+      },
+    );
+  }
+
+  private getHoursLabel(hours: number): string {
+    if (hours === 1) return 'час';
+    if (hours >= 2 && hours <= 4) return 'часа';
+    return 'часов';
+  }
+
   private getPeriodLabel(months: number): string {
     if (months === 1) return '1 месяц';
     if (months >= 2 && months <= 4) return `${months} месяца`;
     return `${months} месяцев`;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

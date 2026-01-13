@@ -106,6 +106,39 @@ export class PaymentsService {
   }
 
   /**
+   * Найти платёж по clientId (UUID из vlessKey)
+   * vlessKey имеет формат: vless://{clientId}@...
+   */
+  async findByClientId(clientId: string): Promise<PaymentSession | null> {
+    const sessions = await this.paymentRepository.find({
+      where: { status: 'paid' },
+    });
+
+    // Ищем сессию где vlessKey содержит clientId
+    return sessions.find((s) => s.vlessKey?.includes(clientId)) || null;
+  }
+
+  /**
+   * Найти все платежи по списку clientId
+   */
+  async findByClientIds(clientIds: string[]): Promise<Map<string, PaymentSession>> {
+    const sessions = await this.paymentRepository.find({
+      where: { status: 'paid' },
+    });
+
+    const result = new Map<string, PaymentSession>();
+
+    for (const clientId of clientIds) {
+      const session = sessions.find((s) => s.vlessKey?.includes(clientId));
+      if (session) {
+        result.set(clientId, session);
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Очистить просроченные pending сессии
    */
   async cleanupExpiredSessions(): Promise<number> {

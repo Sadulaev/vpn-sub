@@ -37,6 +37,7 @@ export enum AdminCallbacks {
   // Серверы
   ServersList = 'servers_list',
   DeleteExpiredClients = 'delete_expired',
+  NotifyExpiringClients = 'notify_expiring',
   
   // Генерация ключей
   GenerateKeyMenu = 'generate_key_menu',
