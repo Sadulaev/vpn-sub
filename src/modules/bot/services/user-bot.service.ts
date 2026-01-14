@@ -162,7 +162,7 @@ export class UserBotService {
     const paymentUrl = this.robokassaService.generatePaymentUrl({
       invId: session.invId,
       amount: plan.price,
-      description: `HyperVPN ${plan.label}`,
+      description: `Подписка на сервис на ${months} месяц${months === 1 ? '' : months >= 4 ? 'ев' : 'а'}`,
       orderId: session.id,
     });
 
