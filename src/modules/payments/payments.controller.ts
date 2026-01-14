@@ -34,7 +34,7 @@ export class PaymentsController {
    * ResultURL — серверный колбэк от Robokassa
    * Вызывается автоматически при успешной оплате
    */
-  @Post('result')
+  @Post('approve')
   async handleResult(
     @Body() body: RobokassaCallbackBody,
     @Res() res: Response,
