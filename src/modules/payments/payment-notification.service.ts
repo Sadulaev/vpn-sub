@@ -9,7 +9,8 @@ export class PaymentNotificationService {
   private readonly bot: Telegraf;
 
   constructor(private readonly configService: ConfigService) {
-    const token = this.configService.get<string>('telegram.userBotToken');
+    const telegram = this.configService.get('telegram');
+    const token = telegram?.userBotToken;
     if (token) {
       this.bot = new Telegraf(token);
     } else {

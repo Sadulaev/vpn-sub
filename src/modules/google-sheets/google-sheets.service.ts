@@ -10,12 +10,14 @@ export class GoogleSheetsService implements OnModuleInit {
   private readonly timeout = 10000;
 
   constructor(private readonly configService: ConfigService) {
-    this.spreadsheetId = this.configService.get<string>('googleSheets.spreadsheetId') || '';
+    const googleSheets = this.configService.get('googleSheets');
+    this.spreadsheetId = googleSheets?.spreadsheetId || '';
   }
 
   async onModuleInit(): Promise<void> {
-    const clientEmail = this.configService.get<string>('googleSheets.clientEmail');
-    const privateKey = this.configService.get<string>('googleSheets.privateKey');
+    const googleSheets = this.configService.get('googleSheets');
+    const clientEmail = googleSheets?.clientEmail;
+    const privateKey = googleSheets?.privateKey;
 
     if (!clientEmail || !privateKey || !this.spreadsheetId) {
       this.logger.warn('Google Sheets credentials not configured, skipping initialization');

@@ -17,10 +17,11 @@ export class RobokassaService {
   private readonly testMode: boolean;
 
   constructor(private readonly configService: ConfigService) {
-    this.merchantId = this.configService.get<string>('robokassa.merchantId') || '';
-    this.password1 = this.configService.get<string>('robokassa.password1') || '';
-    this.password2 = this.configService.get<string>('robokassa.password2') || '';
-    this.testMode = this.configService.get<boolean>('robokassa.testMode') || false;
+    const robokassa = this.configService.get('robokassa');
+    this.merchantId = robokassa?.merchantId || '';
+    this.password1 = robokassa?.password1 || '';
+    this.password2 = robokassa?.password2 || '';
+    this.testMode = robokassa?.testMode || false;
   }
 
   /**

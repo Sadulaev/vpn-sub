@@ -21,7 +21,8 @@ export class VpnServersService {
    * Получить список активных серверов из конфигурации
    */
   getServers(): VpnServerConfig[] {
-    return this.configService.get<VpnServerConfig[]>('vpnServers.servers') || [];
+    const vpnServers = this.configService.get('vpnServers');
+    return vpnServers?.servers || [];
   }
 
   /**

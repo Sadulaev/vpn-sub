@@ -23,7 +23,8 @@ export class BroadcastService {
     private readonly configService: ConfigService,
     private readonly googleSheetsService: GoogleSheetsService,
   ) {
-    const token = this.configService.get<string>('telegram.userBotToken');
+    const telegram = this.configService.get('telegram');
+    const token = telegram?.userBotToken;
     if (token) {
       this.bot = new Telegraf(token);
     } else {

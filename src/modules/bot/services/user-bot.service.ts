@@ -29,10 +29,8 @@ export class UserBotService {
    * Получить планы подписок из конфигурации
    */
   private getPlans(): SubscriptionPlan[] {
-    return (
-      this.configService.get<SubscriptionPlan[]>("subscriptionPlans.plans") ||
-      []
-    );
+    const subscriptionPlans = this.configService.get('subscriptionPlans');
+    return subscriptionPlans?.plans || [];
   }
 
   /**

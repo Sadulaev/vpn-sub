@@ -6,7 +6,6 @@ import * as LocalSession from 'telegraf-session-local';
 import configuration from './config';
 
 // Модули
-import { DatabaseModule } from '@database/database.module';
 import { VpnServersModule } from '@modules/vpn-servers';
 import { PaymentsModule } from '@modules/payments';
 import { GoogleSheetsModule } from '@modules/google-sheets';
@@ -15,6 +14,8 @@ import { AdminBotModule } from '@modules/admin-bot';
 
 // Interceptors
 import { TelegrafErrorInterceptor } from '@common/interceptors/telegraf-error.interceptor';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { BotState, PaymentSession, User } from '@database/entities';
 
 // Sessions для ботов
 const userBotSessions = new LocalSession({ database: 'sessions/user_bot.json' });
@@ -45,7 +46,17 @@ const adminBotSessions = new LocalSession({ database: 'sessions/admin_bot.json' 
     }),
 
     // База данных
-    DatabaseModule,
+       TypeOrmModule.forRoot({
+      type: 'postgres',
+      host: configuration().database.host,
+      port: configuration().database.port,
+      username: configuration().database.username,
+      password: configuration().database.password,
+      database: configuration().database.database,
+      entities: [PaymentSession, User, BotState],
+      synchronize: true,
+      autoLoadEntities: true,
+    }),
 
     // Функциональные модули
     VpnServersModule,
