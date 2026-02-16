@@ -4,8 +4,6 @@ export type {
   TelegramConfig,
   RobokassaConfig,
   GoogleSheetsConfig,
-  VpnServerConfig,
-  VpnServersConfig,
   SubscriptionPlan,
   SubscriptionPlansConfig,
   Config,

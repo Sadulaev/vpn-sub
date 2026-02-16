@@ -1,25 +1,25 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import * as LocalSession from 'telegraf-session-local';
 import configuration from './config';
 
 // Модули
-import { VpnServersModule } from '@modules/vpn-servers';
 import { PaymentsModule } from '@modules/payments';
 import { GoogleSheetsModule } from '@modules/google-sheets';
 import { UserBotModule } from '@modules/bot/user-bot.module';
-import { AdminBotModule } from '@modules/admin-bot';
+import { XuiApiModule } from '@modules/xui-api';
+import { ClientsModule } from '@modules/clients';
+import { ServerPoolsModule } from '@modules/server-pools';
+import { SubscriptionsModule } from '@modules/subscriptions';
 
 // Interceptors
 import { TelegrafErrorInterceptor } from '@common/interceptors/telegraf-error.interceptor';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { BotState, PaymentSession, User } from '@database/entities';
 
 // Sessions для ботов
 const userBotSessions = new LocalSession({ database: 'sessions/user_bot.json' });
-const adminBotSessions = new LocalSession({ database: 'sessions/admin_bot.json' });
 
 @Module({
   imports: [
@@ -37,33 +37,26 @@ const adminBotSessions = new LocalSession({ database: 'sessions/admin_bot.json' 
       include: [UserBotModule],
     }),
 
-    // Админ-бот
-    TelegrafModule.forRoot({
-      botName: 'adminBot',
-      token: configuration().telegram.adminBotToken,
-      middlewares: [adminBotSessions.middleware()],
-      include: [AdminBotModule],
-    }),
-
     // База данных
-       TypeOrmModule.forRoot({
+    TypeOrmModule.forRoot({
       type: 'postgres',
       host: configuration().database.host,
       port: configuration().database.port,
       username: configuration().database.username,
       password: configuration().database.password,
       database: configuration().database.database,
-      entities: [PaymentSession, User, BotState],
       synchronize: true,
       autoLoadEntities: true,
     }),
 
     // Функциональные модули
-    VpnServersModule,
+    XuiApiModule,
+    ClientsModule,
+    ServerPoolsModule,
+    SubscriptionsModule,
     PaymentsModule,
     GoogleSheetsModule,
     UserBotModule,
-    AdminBotModule,
   ],
   providers: [
     {

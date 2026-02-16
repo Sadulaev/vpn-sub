@@ -9,7 +9,6 @@ import {
 import { Response } from 'express';
 import { PaymentsService } from './payments.service';
 import { RobokassaService } from './robokassa.service';
-import { VpnServersService } from '@modules/vpn-servers';
 import { PaymentNotificationService } from './payment-notification.service';
 
 interface RobokassaCallbackBody {
@@ -26,7 +25,6 @@ export class PaymentsController {
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly robokassaService: RobokassaService,
-    private readonly vpnServersService: VpnServersService,
     private readonly notificationService: PaymentNotificationService,
   ) {}
 
@@ -70,23 +68,14 @@ export class PaymentsController {
       return res.send(`OK${InvId}`);
     }
 
-    // 4. Создаём VLESS ключ
-    const keyResult = await this.vpnServersService.createVlessKey(session.period);
+    // 4. Помечаем как оплаченный
+    // TODO: Интеграция с SubscriptionsService для создания подписки после оплаты
+    await this.paymentsService.markPaidAndSaveKey(InvId, '');
 
-    if (!keyResult) {
-      this.logger.error(`Failed to create VLESS key for payment: ${InvId}`);
-      // Уведомляем пользователя о проблеме
-      await this.notificationService.notifyKeyGenerationError(session.telegramId);
-      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).send('Key generation failed');
-    }
-
-    // 5. Сохраняем ключ и помечаем как оплаченный
-    await this.paymentsService.markPaidAndSaveKey(InvId, keyResult.vless);
-
-    // 6. Уведомляем пользователя
+    // 5. Уведомляем пользователя
     await this.notificationService.notifyPaymentSuccess(
       session.telegramId,
-      keyResult.vless,
+      '',
       session.period,
     );
 

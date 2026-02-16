@@ -24,29 +24,3 @@ export enum BotCallbacks {
   MyKeys = 'my_keys',
 }
 
-/**
- * Колбэки для админ-бота
- */
-export enum AdminCallbacks {
-  Menu = 'admin_menu',
-  
-  // Рассылка
-  BroadcastStart = 'broadcast_start',
-  BroadcastToOne = 'broadcast_one',
-  
-  // Серверы
-  ServersList = 'servers_list',
-  DeleteExpiredClients = 'delete_expired',
-  NotifyExpiringClients = 'notify_expiring',
-  
-  // Генерация ключей
-  GenerateKeyMenu = 'generate_key_menu',
-  GenerateKey1m = 'generate_1m',
-  GenerateKey3m = 'generate_3m',
-  GenerateKey6m = 'generate_6m',
-  GenerateKey12m = 'generate_12m',
-  
-  // Управление ботом
-  ToggleBot = 'toggle_bot',
-}
-
