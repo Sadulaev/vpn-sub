@@ -42,6 +42,15 @@ export class ClientsService {
   }
 
   /**
+   * Получить всех клиентов
+   */
+  async findAll(): Promise<Client[]> {
+    return this.clientRepo.find({
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
    * Создать нового клиента
    */
   async create(dto: CreateClientDto): Promise<Client> {

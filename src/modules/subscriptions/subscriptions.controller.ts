@@ -21,6 +21,16 @@ export class SubscriptionsController {
 
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
+  @Get()
+  @ApiOperation({ 
+    summary: 'Получить все подписки', 
+    description: 'Возвращает список всех подписок в системе' 
+  })
+  @ApiResponse({ status: 200, description: 'Список подписок успешно получен' })
+  async getAllSubscriptions() {
+    return this.subscriptionsService.findAll();
+  }
+
   @Post()
   @ApiOperation({ summary: 'Создать подписку', description: 'Создаёт клиента (если не существует), регистрирует его на всех 3x-ui серверах и создаёт подписку на указанный период. Открытый эндпоинт (позже будет связан с оплатой).' })
   @ApiBody({ type: CreateSubscriptionDto })

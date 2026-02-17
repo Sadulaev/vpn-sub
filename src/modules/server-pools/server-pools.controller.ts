@@ -10,7 +10,7 @@ export class ServerPoolsController {
 
   // ─── Пулы серверов ───
 
-  @Get('pools')
+  @Get()
   @ApiOperation({ 
     summary: 'Получить все пулы', 
     description: 'Возвращает список всех активных пулов серверов с их серверами' 
@@ -20,7 +20,7 @@ export class ServerPoolsController {
     return this.serverPoolsService.findAllPools();
   }
 
-  @Get('pools/:id')
+  @Get(':id')
   @ApiOperation({ 
     summary: 'Получить пул по ID', 
     description: 'Возвращает информацию о пуле с его серверами' 
@@ -32,7 +32,7 @@ export class ServerPoolsController {
     return this.serverPoolsService.findPoolById(id);
   }
 
-  @Post('pools')
+  @Post()
   @ApiOperation({ 
     summary: 'Создать пул серверов', 
     description: 'Создаёт новый пул для группировки серверов по регионам или другим критериям' 
@@ -43,7 +43,7 @@ export class ServerPoolsController {
     return this.serverPoolsService.createPool(dto);
   }
 
-  @Put('pools/:id')
+  @Put(':id')
   @ApiOperation({ 
     summary: 'Обновить пул серверов', 
     description: 'Обновляет данные пула серверов' 
@@ -56,7 +56,7 @@ export class ServerPoolsController {
     return this.serverPoolsService.updatePool(id, dto);
   }
 
-  @Delete('pools/:id')
+  @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ 
     summary: 'Удалить пул серверов', 
@@ -77,6 +77,44 @@ export class ServerPoolsController {
     description: 'Возвращает список всех XUI серверов (включая неактивные)' 
   })
   @ApiResponse({ status: 200, description: 'Список серверов успешно получен' })
+  async getAllServers() {
+    return this.serverPoolsService.findAllServers();
+  }
+
+  @Get('servers/active')
+  @ApiOperation({ 
+    summary: 'Получить активные серверы', 
+    description: 'Возвращает список только активных XUI серверов' 
+  })
+  @ApiResponse({ status: 200, description: 'Список активных серверов успешно получен' })
+  async getActiveServers() {
+    return this.serverPoolsService.findAllActiveServers();
+  }
+
+  @Get('servers/:id')
+  @ApiOperation({ 
+    summary: 'Получить сервер по ID', 
+    description: 'Возвращает информацию о конкретном сервере' 
+  })
+  @ApiParam({ name: 'id', description: 'ID сервера' })
+  @ApiResponse({ status: 200, description: 'Сервер найден' })
+  @ApiResponse({ status: 404, description: 'Сервер не найден' })
+  async getServerById(@Param('id', ParseIntPipe) id: number) {
+    return this.serverPoolsService.findServerById(id);
+  }
+
+  @Post('servers')
+  @ApiOperation({ 
+    summary: 'Добавить новый сервер', 
+    description: 'Создаёт новый XUI сервер с параметрами подключения к панели 3x-ui и настройками VLESS' 
+  })
+  @ApiResponse({ status: 201, description: 'Сервер успешно создан' })
+  @ApiResponse({ status: 400, description: 'Некорректные данные' })
+  @ApiResponse({ status: 404, description: 'Указанный пул не найден' })
+  async createServer(@Body() dto: CreateServerDto) {
+    return this.serverPoolsService.createServer(dto);
+  }
+
   @Put('servers/:id')
   @ApiOperation({ 
     summary: 'Обновить сервер', 
@@ -101,32 +139,6 @@ export class ServerPoolsController {
   @ApiResponse({ status: 404, description: 'Сервер не найден' })
   async deleteServer(@Param('id', ParseIntPipe) id: number) {
     return this.serverPoolsService.deleteServer(id);
-  }
-
-  async getAllServers() {
-    return this.serverPoolsService.findAllServers();
-  }
-
-  @Get('servers/active')
-  @ApiOperation({ 
-    summary: 'Получить активные серверы', 
-    description: 'Возвращает список только активных XUI серверов' 
-  })
-  @ApiResponse({ status: 200, description: 'Список активных серверов успешно получен' })
-  async getActiveServers() {
-    return this.serverPoolsService.findAllActiveServers();
-  }
-
-  @Post('servers')
-  @ApiOperation({ 
-    summary: 'Добавить новый сервер', 
-    description: 'Создаёт новый XUI сервер с параметрами подключения к панели 3x-ui и настройками VLESS' 
-  })
-  @ApiResponse({ status: 201, description: 'Сервер успешно создан' })
-  @ApiResponse({ status: 400, description: 'Некорректные данные' })
-  @ApiResponse({ status: 404, description: 'Указанный пул не найден' })
-  async createServer(@Body() dto: CreateServerDto) {
-    return this.serverPoolsService.createServer(dto);
   }
 
   // ─── Статистика ───

@@ -99,6 +99,16 @@ export class SubscriptionsService {
   }
 
   /**
+   * Получить все подписки
+   */
+  async findAll(): Promise<Subscription[]> {
+    return this.subscriptionRepo.find({
+      relations: ['client'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
    * Получить подписку (VLESS-ссылки) для клиента.
    * Возвращает ВСЕ активные сервера из всех пулов.
    * Формат: base64(lines of vless://) — стандарт для v2raytun, happ и т.д.

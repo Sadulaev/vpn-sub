@@ -106,6 +106,16 @@ export class ServerPoolsService {
     return this.xuiServerRepo.find({ relations: ['serverPool'] });
   }
 
+  /**
+   * Получить сервер по ID
+   */
+  async findServerById(id: number): Promise<XuiServer | null> {
+    return this.xuiServerRepo.findOne({
+      where: { id },
+      relations: ['serverPool'],
+    });
+  }
+
   async createServer(dto: CreateServerDto): Promise<XuiServer> {
     // Проверяем существование пула, если указан
     if (dto.serverPoolId) {

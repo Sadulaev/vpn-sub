@@ -8,6 +8,16 @@ import { CreateClientDto, UpdateClientDto } from './dto';
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
+  @Get()
+  @ApiOperation({ 
+    summary: 'Получить всех клиентов', 
+    description: 'Возвращает список всех клиентов в системе' 
+  })
+  @ApiResponse({ status: 200, description: 'Список клиентов успешно получен' })
+  async getAllClients() {
+    return this.clientsService.findAll();
+  }
+
   @Post()
   @ApiOperation({ 
     summary: 'Создать клиента', 
