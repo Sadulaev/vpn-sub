@@ -9,9 +9,10 @@ data/servers.json
 dist/
 build/
 
-# Environment
+# Environment (secrets - NEVER commit these!)
 .env
 .env.*
+!.env.example
 *.env
 env.prod*
 
