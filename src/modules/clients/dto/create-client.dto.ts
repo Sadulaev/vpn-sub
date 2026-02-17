@@ -1,28 +1,23 @@
-import { IsString, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateSubscriptionDto {
-  /** Telegram ID клиента */
+export class CreateClientDto {
   @ApiProperty({ example: '123456789', description: 'Telegram ID клиента' })
   @IsString()
   telegramId!: string;
 
-  /** Telegram username (опционально) */
   @ApiPropertyOptional({ example: 'john_doe', description: 'Username в Telegram' })
   @IsString()
   @IsOptional()
   username?: string;
 
-  /** Имя в Telegram (опционально) */
   @ApiPropertyOptional({ example: 'John', description: 'Имя пользователя в Telegram' })
   @IsString()
   @IsOptional()
   firstName?: string;
 
-  /** Период подписки в месяцах */
-  @ApiProperty({ example: 1, description: 'Период подписки в месяцах (1-24)', minimum: 1, maximum: 24 })
-  @IsInt()
-  @Min(1)
-  @Max(24)
-  months!: number;
+  @ApiPropertyOptional({ example: true, description: 'Активен ли клиент', default: true })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

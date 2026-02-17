@@ -6,6 +6,7 @@ import {
   Logger,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { Response } from 'express';
 import { PaymentsService } from './payments.service';
 import { RobokassaService } from './robokassa.service';
@@ -18,6 +19,7 @@ interface RobokassaCallbackBody {
   Shp_order: string;
 }
 
+@ApiTags('Payments')
 @Controller('payment')
 export class PaymentsController {
   private readonly logger = new Logger(PaymentsController.name);
@@ -28,11 +30,11 @@ export class PaymentsController {
     private readonly notificationService: PaymentNotificationService,
   ) {}
 
-  /**
-   * ResultURL — серверный колбэк от Robokassa
-   * Вызывается автоматически при успешной оплате
-   */
   @Post('approve')
+  @ApiOperation({ summary: 'ResultURL колбэк Robokassa', description: 'Серверный колбэк от Robokassa при успешной оплате. Вызывается автоматически.' })
+  @ApiResponse({ status: 200, description: 'Оплата обработана, ответ OK{InvId}' })
+  @ApiResponse({ status: 400, description: 'Неверная подпись' })
+  @ApiResponse({ status: 404, description: 'Сессия платежа не найдена' })
   async handleResult(
     @Body() body: RobokassaCallbackBody,
     @Res() res: Response,
@@ -85,19 +87,15 @@ export class PaymentsController {
     return res.send(`OK${InvId}`);
   }
 
-  /**
-   * SuccessURL — редирект пользователя после успешной оплаты
-   */
   @Post('success')
+  @ApiExcludeEndpoint()
   async handleSuccess(@Res() res: Response) {
     // Редиректим пользователя обратно в бота
     return res.redirect('https://t.me/hyper_vpn_bot');
   }
 
-  /**
-   * FailURL — редирект при неудачной оплате
-   */
   @Post('fail')
+  @ApiExcludeEndpoint()
   async handleFail(@Res() res: Response) {
     return res.redirect('https://t.me/hyper_vpn_bot');
   }

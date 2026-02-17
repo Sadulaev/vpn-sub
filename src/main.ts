@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -39,10 +40,28 @@ async function bootstrap() {
   const appConfig = configService.get('app');
   const port = appConfig?.port || 3000;
 
+  // Swagger
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('HyperVPN API')
+    .setDescription('API для управления VPN-подписками, клиентами и серверами')
+    .setVersion('1.0')
+    .addTag('Subscriptions', 'Управление подписками')
+    .addTag('Payments', 'Обработка платежей Robokassa')
+    .addTag('Server Pools', 'Управление серверами и пулами')
+    .addTag('Clients', 'Управление клиентами')
+    .build();
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('docs', app, document);
+
+  // Валидация DTO
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
   await app.listen(port);
 
   logger.log(`🚀 Application is running on port ${port}`);
   logger.log(`📊 Environment: ${appConfig?.nodeEnv}`);
+  logger.log(`📖 Swagger docs: http://localhost:${port}/docs`);
 }
 
 bootstrap();
