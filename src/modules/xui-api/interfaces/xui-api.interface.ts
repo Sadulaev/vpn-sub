@@ -37,3 +37,9 @@ export interface XuiInboundsResponse {
   success: boolean;
   obj: XuiInbound[];
 }
+
+export interface XuiOnlinesResponse {
+  success: boolean;
+  msg: string;
+  obj: string[]; // массив email'ов онлайн клиентов
+}

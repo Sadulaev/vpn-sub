@@ -7,6 +7,7 @@ import {
   XuiInboundClient,
   XuiInbound,
   XuiInboundSettings,
+  XuiOnlinesResponse,
 } from './interfaces/xui-api.interface';
 
 @Injectable()
@@ -149,19 +150,100 @@ export class XuiApiService {
   }
 
   /**
-   * Получить количество активных клиентов на сервере
+   * Получить список онлайн клиентов на сервере
+   */
+  async getOnlineClients(server: XuiServer, cookie: string): Promise<XuiOnlinesResponse | null> {
+    try {
+      const url = this.buildUrl(server, '/panel/api/inbounds/onlines');
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Cookie: cookie },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Get onlines failed with status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      this.logger.error(`Failed to get online clients from ${server.name}:`, error);
+      await this.markServerFailedIfDown(server, error);
+      return null;
+    }
+  }
+
+  /**
+   * Получить количество активных (онлайн) клиентов на сервере.
+   * Использует endpoint /panel/api/inbounds/onlines для получения
+   * реального списка подключённых пользователей.
    */
   async getActiveClientsCount(server: XuiServer): Promise<number | null> {
     const cookie = await this.login(server);
     if (!cookie) return null;
 
-    const inbounds = await this.getInbounds(server, cookie);
-    if (!inbounds?.obj) return null;
+    const onlines = await this.getOnlineClients(server, cookie);
+    if (!onlines || !onlines.success) return null;
 
-    return inbounds.obj.reduce(
-      (acc, inbound) => acc + (inbound.clientStats?.length || 0),
-      0,
+    return onlines.obj.length;
+  }
+
+  /**
+   * Получить статистику трафика клиента со всех серверов.
+   * Суммирует upload и download со всех 3x-ui серверов.
+   * @param clientUuid - UUID клиента
+   * @param servers - список серверов для опроса
+   * @returns {upload: bytes, download: bytes, total: upload + download}
+   */
+  async getClientTrafficStats(clientUuid: string, servers: XuiServer[]): Promise<{
+    upload: number;
+    download: number;
+    total: number;
+  }> {
+    let totalUpload = 0;
+    let totalDownload = 0;
+
+    await Promise.all(
+      servers.map(async (server) => {
+        try {
+          const cookie = await this.login(server);
+          if (!cookie) return;
+
+          const inbounds = await this.getInbounds(server, cookie);
+          if (!inbounds?.obj) return;
+
+          // Ищем статистику клиента во всех inbound-ах
+          for (const inbound of inbounds.obj) {
+            if (!inbound.clientStats) continue;
+
+            const clientStat = inbound.clientStats.find(
+              (stat) => stat.email === `client-${clientUuid.slice(0, 8)}` || 
+                        stat.email.includes(clientUuid.slice(0, 8)),
+            );
+
+            if (clientStat) {
+              totalUpload += clientStat.up || 0;
+              totalDownload += clientStat.down || 0;
+              this.logger.debug(
+                `Client ${clientUuid.slice(0, 8)} on ${server.name}: ↑${clientStat.up} ↓${clientStat.down}`,
+              );
+            }
+          }
+        } catch (error) {
+          this.logger.error(`Failed to get stats from ${server.name}:`, error);
+        }
+      }),
     );
+
+    const total = totalUpload + totalDownload;
+    this.logger.log(
+      `Client ${clientUuid.slice(0, 8)} total traffic: ↑${totalUpload} ↓${totalDownload} (${total} bytes)`,
+    );
+
+    return {
+      upload: totalUpload,
+      download: totalDownload,
+      total,
+    };
   }
 
   /**

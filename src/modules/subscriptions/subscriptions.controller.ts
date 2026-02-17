@@ -70,8 +70,9 @@ export class SubscriptionsController {
       res.setHeader('profile-update-interval', '6');
       
       // Информация о подписке: трафик и дата окончания
-      // Формат: upload=bytes; download=bytes; total=bytes; expire=timestamp
-      const userinfo = `upload=0; download=0; total=${result.totalTraffic}; expire=${result.expireTimestamp}`;
+      // Формат: upload=usedBytes; download=usedBytes; total=limitBytes (0=unlimited); expire=timestamp
+      // В v2ray клиентах usedTraffic отображается как использованный объём
+      const userinfo = `upload=${result.usedTraffic}; download=${result.usedTraffic}; total=${result.totalTraffic}; expire=${result.expireTimestamp}`;
       res.setHeader('subscription-userinfo', userinfo);
       
       // Ссылка на бот (опционально)

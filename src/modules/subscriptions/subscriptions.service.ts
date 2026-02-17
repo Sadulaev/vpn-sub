@@ -123,6 +123,7 @@ export class SubscriptionsService {
     const allPools = await this.serverPoolsService.findAllPools();
 
     const vlessLinks: string[] = [];
+    const allActiveServers: XuiServer[] = [];
 
     for (const pool of allPools) {
       if (!pool.isActive) continue;
@@ -131,6 +132,8 @@ export class SubscriptionsService {
       const activeServers = (pool.servers || []).filter(
         (s) => s.status === XuiServerStatus.ACTIVE,
       );
+
+      allActiveServers.push(...activeServers);
 
       for (const server of activeServers) {
         const vlessLink = this.xuiApi.buildVlessLink(server, clientUuid, pool.name);
@@ -145,12 +148,15 @@ export class SubscriptionsService {
 
     this.logger.log(`Generated ${vlessLinks.length} VLESS links for client ${clientUuid}`);
 
+    // Получаем статистику трафика со всех серверов
+    const trafficStats = await this.xuiApi.getClientTrafficStats(clientUuid, allActiveServers);
+
     // Возвращаем в формате base64 (стандарт подписок) + метаданные
     return {
       content: Buffer.from(vlessLinks.join('\n')).toString('base64'),
       expireTimestamp: Math.floor(activeSubscription.endDate.getTime() / 1000),
-      totalTraffic: 0, // безлимит
-      usedTraffic: 0,
+      totalTraffic: 0, // безлимит (0 = unlimited в v2ray клиентах)
+      usedTraffic: trafficStats.total, // upload + download в байтах
     };
   }
 
