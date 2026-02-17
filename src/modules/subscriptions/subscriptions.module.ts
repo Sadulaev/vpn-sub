@@ -6,6 +6,7 @@ import { ServerPoolsModule } from '@modules/server-pools';
 import { XuiApiModule } from '@modules/xui-api';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionsController } from './subscriptions.controller';
+import { SubscriptionPublicController } from './subscription-public.controller';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { SubscriptionsController } from './subscriptions.controller';
     ServerPoolsModule,
     XuiApiModule,
   ],
-  controllers: [SubscriptionsController],
+  controllers: [SubscriptionsController, SubscriptionPublicController],
   providers: [SubscriptionsService],
   exports: [SubscriptionsService],
 })

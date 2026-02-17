@@ -39,20 +39,44 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const appConfig = configService.get('app');
   const port = appConfig?.port || 3000;
+  const isProduction = appConfig?.nodeEnv === 'production';
 
-  // Swagger
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('HyperVPN API')
-    .setDescription('API для управления VPN-подписками, клиентами и серверами')
-    .setVersion('1.0')
-    .addTag('Subscriptions', 'Управление подписками')
-    .addTag('Payments', 'Обработка платежей Robokassa')
-    .addTag('Server Pools', 'Управление серверами и пулами')
-    .addTag('Clients', 'Управление клиентами')
-    .build();
+  // Swagger только для development
+  if (!isProduction) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('HyperVPN API')
+      .setDescription('API для управления VPN-подписками, клиентами и серверами')
+      .setVersion('1.0')
+      .addTag('Subscriptions', 'Управление подписками')
+      .addTag('Payments', 'Обработка платежей Robokassa')
+      .addTag('Server Pools', 'Управление серверами и пулами')
+      .addTag('Clients', 'Управление клиентами')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document);
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('docs', app, document);
+    logger.log('📖 Swagger enabled for development');
+  } else {
+    logger.log('📖 Swagger disabled (production mode)');
+  }
+
+  // Global prefix для API (исключая публичный эндпоинт /sub/:clientId)
+  app.setGlobalPrefix('api', {
+    exclude: ['sub/:clientId'],
+  });
+
+  // CORS настройки
+  app.enableCors({
+    origin: [
+      'http://localhost:5173', // Vite dev server
+      'http://localhost:3000',
+      'https://sub.hyper-vpn.ru',
+      appConfig?.baseUrl,
+    ].filter(Boolean),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  });
 
   // Валидация DTO
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -61,7 +85,11 @@ async function bootstrap() {
 
   logger.log(`🚀 Application is running on port ${port}`);
   logger.log(`📊 Environment: ${appConfig?.nodeEnv}`);
-  logger.log(`📖 Swagger docs: http://localhost:${port}/docs`);
+  logger.log(`🌐 Base URL: ${appConfig?.baseUrl}`);
+  
+  if (!isProduction) {
+    logger.log(`📖 Swagger docs: http://localhost:${port}/api/docs`);
+  }
 }
 
 bootstrap();
