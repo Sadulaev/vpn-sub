@@ -20,18 +20,6 @@ export class ServerPoolsController {
     return this.serverPoolsService.findAllPools();
   }
 
-  @Get(':id')
-  @ApiOperation({ 
-    summary: 'Получить пул по ID', 
-    description: 'Возвращает информацию о пуле с его серверами' 
-  })
-  @ApiParam({ name: 'id', description: 'ID пула' })
-  @ApiResponse({ status: 200, description: 'Пул найден' })
-  @ApiResponse({ status: 404, description: 'Пул не найден' })
-  async getPoolById(@Param('id', ParseIntPipe) id: number) {
-    return this.serverPoolsService.findPoolById(id);
-  }
-
   @Post()
   @ApiOperation({ 
     summary: 'Создать пул серверов', 
@@ -41,32 +29,6 @@ export class ServerPoolsController {
   @ApiResponse({ status: 400, description: 'Некорректные данные' })
   async createPool(@Body() dto: CreatePoolDto) {
     return this.serverPoolsService.createPool(dto);
-  }
-
-  @Put(':id')
-  @ApiOperation({ 
-    summary: 'Обновить пул серверов', 
-    description: 'Обновляет данные пула серверов' 
-  })
-  @ApiParam({ name: 'id', description: 'ID пула' })
-  @ApiResponse({ status: 200, description: 'Пул успешно обновлён' })
-  @ApiResponse({ status: 404, description: 'Пул не найден' })
-  @ApiResponse({ status: 400, description: 'Некорректные данные' })
-  async updatePool(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePoolDto) {
-    return this.serverPoolsService.updatePool(id, dto);
-  }
-
-  @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ 
-    summary: 'Удалить пул серверов', 
-    description: 'Удаляет пул серверов. Все серверы в этом пуле будут отвязаны от пула (serverPoolId = null)' 
-  })
-  @ApiParam({ name: 'id', description: 'ID пула' })
-  @ApiResponse({ status: 204, description: 'Пул успешно удалён' })
-  @ApiResponse({ status: 404, description: 'Пул не найден' })
-  async deletePool(@Param('id', ParseIntPipe) id: number) {
-    return this.serverPoolsService.deletePool(id);
   }
 
   // ─── Серверы ───
@@ -161,5 +123,45 @@ export class ServerPoolsController {
   @ApiResponse({ status: 200, description: 'Список оптимальных серверов получен' })
   async getBestServers() {
     return this.serverPoolsService.getBestServersPerPool();
+  }
+
+  // ─── Пулы по ID (ДОЛЖНЫ БЫТЬ В КОНЦЕ!) ───
+
+  @Get(':id')
+  @ApiOperation({ 
+    summary: 'Получить пул по ID', 
+    description: 'Возвращает информацию о пуле с его серверами' 
+  })
+  @ApiParam({ name: 'id', description: 'ID пула' })
+  @ApiResponse({ status: 200, description: 'Пул найден' })
+  @ApiResponse({ status: 404, description: 'Пул не найден' })
+  async getPoolById(@Param('id', ParseIntPipe) id: number) {
+    return this.serverPoolsService.findPoolById(id);
+  }
+
+  @Put(':id')
+  @ApiOperation({ 
+    summary: 'Обновить пул серверов', 
+    description: 'Обновляет данные пула серверов' 
+  })
+  @ApiParam({ name: 'id', description: 'ID пула' })
+  @ApiResponse({ status: 200, description: 'Пул успешно обновлён' })
+  @ApiResponse({ status: 404, description: 'Пул не найден' })
+  @ApiResponse({ status: 400, description: 'Некорректные данные' })
+  async updatePool(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePoolDto) {
+    return this.serverPoolsService.updatePool(id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ 
+    summary: 'Удалить пул серверов', 
+    description: 'Удаляет пул серверов. Все серверы в этом пуле будут отвязаны от пула (serverPoolId = null)' 
+  })
+  @ApiParam({ name: 'id', description: 'ID пула' })
+  @ApiResponse({ status: 204, description: 'Пул успешно удалён' })
+  @ApiResponse({ status: 404, description: 'Пул не найден' })
+  async deletePool(@Param('id', ParseIntPipe) id: number) {
+    return this.serverPoolsService.deletePool(id);
   }
 }
