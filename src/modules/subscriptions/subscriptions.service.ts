@@ -12,6 +12,16 @@ import { ServerPoolsService } from '@modules/server-pools';
 import { XuiApiService } from '@modules/xui-api';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 
+/**
+ * Результат получения подписки с метаданными
+ */
+export interface SubscriptionResult {
+  content: string; // base64 encoded VLESS links
+  expireTimestamp: number; // Unix timestamp
+  totalTraffic: number; // 0 = unlimited
+  usedTraffic: number;
+}
+
 @Injectable()
 export class SubscriptionsService {
   private readonly logger = new Logger(SubscriptionsService.name);
@@ -86,11 +96,10 @@ export class SubscriptionsService {
 
   /**
    * Получить подписку (VLESS-ссылки) для клиента.
-   * Для каждого пула выбирает наименее нагруженный сервер
-   * и генерирует VLESS-ссылку.
+   * Возвращает ВСЕ активные сервера из всех пулов.
    * Формат: base64(lines of vless://) — стандарт для v2raytun, happ и т.д.
    */
-  async getSubscriptionContent(clientUuid: string): Promise<string> {
+  async getSubscriptionContent(clientUuid: string): Promise<SubscriptionResult | null> {
     // Проверяем что клиент существует
     const client = await this.clientsService.findById(clientUuid);
     if (!client) {
@@ -110,28 +119,39 @@ export class SubscriptionsService {
       throw new NotFoundException('No active subscription');
     }
 
-    // Для каждого пула берём наименее нагруженный сервер
-    const poolsWithServers = await this.serverPoolsService.getBestServersPerPool();
+    // Получаем ВСЕ пулы со всеми серверами
+    const allPools = await this.serverPoolsService.findAllPools();
 
     const vlessLinks: string[] = [];
 
-    for (const { pool, bestServer } of poolsWithServers) {
-      if (!bestServer) {
-        this.logger.warn(`No available server in pool "${pool.name}"`);
-        continue;
-      }
+    for (const pool of allPools) {
+      if (!pool.isActive) continue;
+      
+      // Берём все активные серверы пула
+      const activeServers = (pool.servers || []).filter(
+        (s) => s.status === XuiServerStatus.ACTIVE,
+      );
 
-      const vlessLink = this.xuiApi.buildVlessLink(bestServer, clientUuid);
-      vlessLinks.push(vlessLink);
+      for (const server of activeServers) {
+        const vlessLink = this.xuiApi.buildVlessLink(server, clientUuid, pool.name);
+        vlessLinks.push(vlessLink);
+      }
     }
 
     if (vlessLinks.length === 0) {
       this.logger.error(`No VLESS links generated for client ${clientUuid}`);
-      return '';
+      return null;
     }
 
-    // Возвращаем в формате base64 (стандарт подписок)
-    return Buffer.from(vlessLinks.join('\n')).toString('base64');
+    this.logger.log(`Generated ${vlessLinks.length} VLESS links for client ${clientUuid}`);
+
+    // Возвращаем в формате base64 (стандарт подписок) + метаданные
+    return {
+      content: Buffer.from(vlessLinks.join('\n')).toString('base64'),
+      expireTimestamp: Math.floor(activeSubscription.endDate.getTime() / 1000),
+      totalTraffic: 0, // безлимит
+      usedTraffic: 0,
+    };
   }
 
   /**

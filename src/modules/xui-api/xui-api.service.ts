@@ -184,8 +184,11 @@ export class XuiApiService {
 
   /**
    * Построить VLESS-ссылку из конфигурации сервера
+   * @param server - сервер с настройками VLESS
+   * @param clientUuid - UUID клиента
+   * @param poolName - название пула (для отображения в клиенте)
    */
-  buildVlessLink(server: XuiServer, clientUuid: string): string {
+  buildVlessLink(server: XuiServer, clientUuid: string, poolName?: string): string {
     const params = new URLSearchParams();
     params.set('type', 'tcp');
     params.set('encryption', 'none');
@@ -200,7 +203,11 @@ export class XuiApiService {
       params.set('flow', server.flow);
     }
 
-    const label = encodeURIComponent(`HyperVPN-${server.name}`);
+    // Формат метки: "🇩🇪 Germany | Server-1" или "HyperVPN | Germany"
+    const labelText = poolName 
+      ? `${poolName} | ${server.name}` 
+      : `HyperVPN | ${server.name}`;
+    const label = encodeURIComponent(labelText);
     return `vless://${clientUuid}@${server.publicHost}:${server.publicPort}?${params.toString()}#${label}`;
   }
 
