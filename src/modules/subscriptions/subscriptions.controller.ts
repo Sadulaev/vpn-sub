@@ -23,7 +23,7 @@ export class SubscriptionsController {
   @Post('api/subscriptions')
   @ApiOperation({ summary: 'Создать подписку', description: 'Создаёт клиента (если не существует), регистрирует его на всех 3x-ui серверах и создаёт подписку на указанный период. Открытый эндпоинт (позже будет связан с оплатой).' })
   @ApiBody({ type: CreateSubscriptionDto })
-  @ApiResponse({ status: 201, description: 'Подписка создана', schema: { example: { success: true, data: { subscriptionId: 'uuid', clientId: 'uuid', subscriptionUrl: '/sub/uuid', servers: { success: ['Germany-1'], failed: [] } } } } })
+  @ApiResponse({ status: 201, description: 'Подписка создана', schema: { example: { success: true, data: { subscriptionId: 'uuid', clientId: 'uuid', subscriptionUrl: 'http://localhost:3000/sub/uuid', servers: { success: ['Germany-1'], failed: [] } } } } })
   async createSubscription(@Body() dto: CreateSubscriptionDto) {
     this.logger.log(`Creating subscription for tg:${dto.telegramId}, ${dto.months} months`);
 

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import * as LocalSession from 'telegraf-session-local';
@@ -13,6 +14,7 @@ import { XuiApiModule } from '@modules/xui-api';
 import { ClientsModule } from '@modules/clients';
 import { ServerPoolsModule } from '@modules/server-pools';
 import { SubscriptionsModule } from '@modules/subscriptions';
+import { TasksModule } from '@modules/tasks';
 
 // Interceptors
 import { TelegrafErrorInterceptor } from '@common/interceptors/telegraf-error.interceptor';
@@ -28,6 +30,9 @@ const userBotSessions = new LocalSession({ database: 'sessions/user_bot.json' })
       isGlobal: true,
       load: [configuration],
     }),
+
+    // Задачи по расписанию (cron)
+    ScheduleModule.forRoot(),
 
     // Пользовательский бот
     TelegrafModule.forRoot({
@@ -57,6 +62,7 @@ const userBotSessions = new LocalSession({ database: 'sessions/user_bot.json' })
     PaymentsModule,
     GoogleSheetsModule,
     UserBotModule,
+    TasksModule,
   ],
   providers: [
     {

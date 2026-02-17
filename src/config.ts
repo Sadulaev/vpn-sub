@@ -2,6 +2,7 @@
 export interface AppConfig {
   port: number;
   nodeEnv: string;
+  baseUrl: string;
 }
 
 // ============= DATABASE CONFIG =============
@@ -59,6 +60,7 @@ export default (): Config => ({
   app: {
     port: parseInt(process.env.PORT || '3000', 10),
     nodeEnv: process.env.NODE_ENV || 'development',
+    baseUrl: process.env.BASE_URL || 'http://localhost:3000',
   },
   database: {
     host: process.env.DB_HOST || 'localhost',

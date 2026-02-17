@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, In } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import {
   Subscription,
   SubscriptionStatus,
@@ -34,6 +35,7 @@ export class SubscriptionsService {
     private readonly clientsService: ClientsService,
     private readonly serverPoolsService: ServerPoolsService,
     private readonly xuiApi: XuiApiService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -86,10 +88,12 @@ export class SubscriptionsService {
       `Subscription ${subscription.id} created for client ${client.id}, expires ${endDate.toISOString()}`,
     );
 
+    const baseUrl = this.configService.get<string>('app.baseUrl', 'http://localhost:3000');
+
     return {
       subscriptionId: subscription.id,
       clientId: client.id,
-      subscriptionUrl: `/sub/${client.id}`,
+      subscriptionUrl: `${baseUrl}/sub/${client.id}`,
       serverResults,
     };
   }
