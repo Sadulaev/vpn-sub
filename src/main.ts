@@ -41,7 +41,12 @@ async function bootstrap() {
   const port = appConfig?.port || 3000;
   const isProduction = appConfig?.nodeEnv === 'production';
 
-  // Swagger только для development
+  // Global prefix для API (исключая публичный эндпоинт /sub/:clientId)
+  app.setGlobalPrefix('api', {
+    exclude: ['sub/:clientId'],
+  });
+
+  // Swagger только для development (после установки префикса)
   if (!isProduction) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('HyperVPN API')
@@ -54,16 +59,11 @@ async function bootstrap() {
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('docs', app, document);
+    SwaggerModule.setup('api/docs', app, document);
     logger.log('📖 Swagger enabled for development');
   } else {
     logger.log('📖 Swagger disabled (production mode)');
   }
-
-  // Global prefix для API (исключая публичный эндпоинт /sub/:clientId)
-  app.setGlobalPrefix('api', {
-    exclude: ['sub/:clientId'],
-  });
 
   // CORS настройки
   app.enableCors({
