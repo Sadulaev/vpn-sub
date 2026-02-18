@@ -1,11 +1,12 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Inject, forwardRef } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
-import { Markup } from "telegraf";
+import { Markup, Telegraf } from "telegraf";
 import { User } from "@database/entities";
 import { PaymentsService, RobokassaService } from "@modules/payments";
 import { GoogleSheetsService } from "@modules/google-sheets";
+import { SubscriptionsService } from "@modules/subscriptions";
 import { BotCallbacks } from "../constants/callbacks";
 import { BotMessages } from "../constants/messages";
 import { MessageContext, CallbackContext } from "../types/context";
@@ -15,15 +16,29 @@ import { formatDate } from "../utils/format-date";
 @Injectable()
 export class UserBotService {
   private readonly logger = new Logger(UserBotService.name);
+  private readonly bot: Telegraf;
 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
+    @Inject(forwardRef(() => RobokassaService))
     private readonly robokassaService: RobokassaService,
-    private readonly googleSheetsService: GoogleSheetsService
-  ) {}
+    private readonly googleSheetsService: GoogleSheetsService,
+    @Inject(forwardRef(() => SubscriptionsService))
+    private readonly subscriptionsService: SubscriptionsService,
+  ) {
+    const telegram = this.configService.get('telegram');
+    const token = telegram?.userBotToken;
+    if (token) {
+      this.bot = new Telegraf(token);
+    } else {
+      this.logger.warn('User bot token not configured');
+      this.bot = null as any;
+    }
+  }
 
   /**
    * Получить планы подписок из конфигурации
@@ -79,7 +94,7 @@ export class UserBotService {
           text: "Приобрести VPN 🛜",
           callback_data: BotCallbacks.Subscriptions,
         },
-        { text: "Мои ключи 🔑", callback_data: BotCallbacks.MyKeys },
+        { text: "Моя подписка 🔑", callback_data: BotCallbacks.MySubscription },
         {
           text: "Инструкция установки 📍",
           callback_data: BotCallbacks.Instructions,
@@ -257,14 +272,13 @@ export class UserBotService {
   }
 
   /**
-   * Показать ключи пользователя
+   * Показать подписку пользователя
    */
-  async showMyKeys(ctx: CallbackContext): Promise<void> {
+  async showMySubscription(ctx: CallbackContext): Promise<void> {
     await ctx.answerCbQuery();
 
     const telegramId = ctx.callbackQuery.from.id.toString();
-    const sessions =
-      await this.paymentsService.getActiveKeysByTelegramId(telegramId);
+    const subscriptions = await this.subscriptionsService.getActiveSubscriptionsByTelegramId(telegramId);
 
     const buttons = Markup.inlineKeyboard([
       { text: "⬅️ Назад", callback_data: BotCallbacks.Menu },
@@ -272,25 +286,21 @@ export class UserBotService {
 
     let message: string;
 
-    if (sessions.length === 0) {
-      message = BotMessages.noActiveKeys;
+    if (subscriptions.length === 0) {
+      message = '🚫 <b>У вас нет активной подписки</b>\n\nПриобретите VPN для доступа к сервису!';
     } else {
-      const keysText = sessions
-        .map((session, index) => {
-          const createdAt = formatDate(session.createdAt);
-          const expiresAt = session.keyExpiresAt
-            ? formatDate(session.keyExpiresAt)
-            : "Неизвестно";
+      // Берем первую (должна быть одна)
+      const subscription = subscriptions[0];
+      const baseUrl = this.configService.get<string>('app.baseUrl', 'http://localhost:3000');
+      const subscriptionUrl = `${baseUrl}/sub/${subscription.clientId}`;
+      
+      const endDate = formatDate(new Date(subscription.endDate));
 
-          return `
-<b>Ключ ${index + 1}</b>
-<pre>${session.vlessKey}</pre>
-📅 Создан: ${createdAt}
-⏳ Действует до: ${expiresAt}`;
-        })
-        .join("\n");
-
-      message = `${BotMessages.activeKeysHeader}\n${keysText}`;
+      message = `<b>✅ Ваша подписка активна!</b>\n\n` +
+        `📅 <b>Действует до:</b> ${endDate}\n` +
+        `📋 <b>Период:</b> ${subscription.months} мес${subscription.months === 1 ? 'яц' : subscription.months >= 5 ? 'ев' : 'яца'}\n\n` +
+        `🔗 <b>Ссылка на подписку:</b>\n<code>${subscriptionUrl}</code>\n\n` +
+        `📱 Скопируйте эту ссылку в ваше VPN-приложение (v2rayNG, Streisand, Happ и др.)`;
     }
 
     try {
@@ -301,6 +311,76 @@ export class UserBotService {
       parse_mode: "HTML",
       reply_markup: buttons.reply_markup,
     });
+  }
+
+  /**
+   * Отправить сообщение пользователям бота
+   * @param message Текст сообщения
+   * @param telegramId Опционально: ID конкретного пользователя. Если не указан - всем пользователям
+   */
+  async sendMessage(message: string, telegramId?: string): Promise<{
+    sent: number;
+    failed: number;
+    errors: string[];
+  }> {
+    if (!this.bot) {
+      throw new Error('Bot instance not available');
+    }
+
+    const errors: string[] = [];
+
+    // Если указан telegramId - отправляем одному пользователю
+    if (telegramId) {
+      try {
+        await this.bot.telegram.sendMessage(telegramId, message, {
+          parse_mode: 'HTML',
+        });
+        this.logger.log(`Message sent to user ${telegramId}`);
+        return { sent: 1, failed: 0, errors: [] };
+      } catch (error) {
+        const errorMsg = `Failed to send message to ${telegramId}: ${error.message}`;
+        this.logger.error(errorMsg);
+        errors.push(errorMsg);
+        return { sent: 0, failed: 1, errors };
+      }
+    }
+
+    // Иначе - отправляем всем пользователям с активными подписками
+    const subscriptions = await this.subscriptionsService.findAll();
+    const uniqueTelegramIds = [
+      ...new Set(
+        subscriptions
+          .filter((sub) => sub.telegramId)
+          .map((sub) => sub.telegramId as string)
+      ),
+    ];
+
+    this.logger.log(`Broadcasting message to ${uniqueTelegramIds.length} users...`);
+
+    let sent = 0;
+    let failed = 0;
+
+    // Отправляем с небольшими задержками, чтобы не словить rate limit
+    for (const userId of uniqueTelegramIds) {
+      try {
+        await this.bot.telegram.sendMessage(userId, message, {
+          parse_mode: 'HTML',
+        });
+        sent++;
+        this.logger.log(`Message sent to user ${userId}`);
+        
+        // Задержка 50мс между сообщениями
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      } catch (error) {
+        failed++;
+        const errorMsg = `Failed to send to ${userId}: ${error.message}`;
+        this.logger.error(errorMsg);
+        errors.push(errorMsg);
+      }
+    }
+
+    this.logger.log(`Broadcast complete: ${sent} sent, ${failed} failed`);
+    return { sent, failed, errors };
   }
 
   private getImageForPeriod(months: number): string {

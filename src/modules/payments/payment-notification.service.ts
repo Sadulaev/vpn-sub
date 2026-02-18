@@ -24,7 +24,7 @@ export class PaymentNotificationService {
    */
   async notifyPaymentSuccess(
     telegramId: string,
-    vlessKey: string,
+    subscriptionUrl: string,
     period: number,
   ): Promise<void> {
     if (!this.bot) return;
@@ -53,11 +53,14 @@ export class PaymentNotificationService {
 
 Поздравляем с успешной покупкой подписки HyperVPN на <b>${periodLabel}</b>!
 
-🔑 <b>Ваш ключ</b> (нажмите, чтобы скопировать):
+🔗 <b>Ссылка на подписку</b> (нажмите, чтобы скопировать):
 
-<pre>${vlessKey}</pre>
+<code>${subscriptionUrl}</code>
 
-📲 Подключите через инструкцию ниже.`;
+📲 Скопируйте эту ссылку в ваше VPN-приложение (v2rayNG, Streisand, Happ и др.)
+👉 Также доступна в разделе "Моя подписка"
+
+📍 Подключите через инструкцию ниже.`;
 
     try {
       await this.bot.telegram.sendMessage(telegramId, message, {

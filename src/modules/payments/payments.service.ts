@@ -52,9 +52,9 @@ export class PaymentsService {
   }
 
   /**
-   * Пометить платёж как оплаченный и сохранить VLESS ключ
+   * Пометить платёж как оплаченный
    */
-  async markPaidAndSaveKey(invId: string, vlessKey: string): Promise<PaymentSession | null> {
+  async markPaid(invId: string): Promise<PaymentSession | null> {
     const session = await this.paymentRepository.findOne({ where: { invId } });
 
     if (!session) {
@@ -69,7 +69,6 @@ export class PaymentsService {
     }
 
     session.status = 'paid';
-    session.vlessKey = vlessKey;
 
     const saved = await this.paymentRepository.save(session);
     this.logger.log(`Payment marked as paid: ${invId}`);

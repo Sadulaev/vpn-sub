@@ -410,7 +410,7 @@ export class XuiApiService {
     });
 
     // Удаляем дубликаты clientId (если у одного клиента несколько активных подписок)
-    const uniqueClientIds = [...new Set(activeSubscriptions.map(sub => sub.clientId))];
+    const uniqueClientIds: string[] = [...new Set(activeSubscriptions.map((sub: Subscription) => sub.clientId))];
     const total = uniqueClientIds.length;
 
     if (total === 0) {
@@ -451,7 +451,7 @@ export class XuiApiService {
 
       // Параллельно добавляем всех клиентов в текущем батче
       const results = await Promise.allSettled(
-        batch.map(async (clientId) => {
+        batch.map(async (clientId: string) => {
           const xuiClient: XuiInboundClient = {
             id: clientId,
             email: `client-${clientId.slice(0, 8)}`,
@@ -475,7 +475,7 @@ export class XuiApiService {
           successCount++;
         } else {
           failedCount++;
-          const clientId = batch[idx];
+          const clientId: string = batch[idx];
           const errorMsg = `Client ${clientId.slice(0, 8)}: ${result.reason?.message || 'Unknown error'}`;
           errors.push(errorMsg);
         }

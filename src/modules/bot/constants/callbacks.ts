@@ -20,7 +20,7 @@ export enum BotCallbacks {
   InstructionsPc = 'instructions_pc',
   InstructionsTv = 'instructions_tv',
 
-  // Ключи
-  MyKeys = 'my_keys',
+  // Подписка
+  MySubscription = 'my_subscription',
 }
 

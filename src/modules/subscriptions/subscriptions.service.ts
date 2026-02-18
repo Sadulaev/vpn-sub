@@ -51,6 +51,14 @@ export class SubscriptionsService {
     subscriptionUrl: string;
     serverResults: { success: string[]; failed: string[] };
   }> {
+    // 0. Проверяем, нет ли уже активной подписки (если указан telegramId)
+    if (dto.telegramId) {
+      const existingSubscriptions = await this.getActiveSubscriptionsByTelegramId(dto.telegramId);
+      if (existingSubscriptions.length > 0) {
+        throw new Error(`User ${dto.telegramId} already has an active subscription`);
+      }
+    }
+
     // 1. Генерировать или использовать переданный clientId
     const clientId = dto.clientId || randomUUID();
 
@@ -261,6 +269,19 @@ export class SubscriptionsService {
     return this.subscriptionRepo.find({
       where: {
         clientId,
+        status: SubscriptionStatus.ACTIVE,
+      },
+      order: { endDate: 'DESC' },
+    });
+  }
+
+  /**
+   * Получить активные подписки по telegramId
+   */
+  async getActiveSubscriptionsByTelegramId(telegramId: string): Promise<Subscription[]> {
+    return this.subscriptionRepo.find({
+      where: {
+        telegramId,
         status: SubscriptionStatus.ACTIVE,
       },
       order: { endDate: 'DESC' },

@@ -7,11 +7,14 @@ import {
   Res,
   Logger,
   HttpStatus,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Response } from 'express';
 import { SubscriptionsService } from './subscriptions.service';
-import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { CreateSubscriptionDto, SendMessageDto } from './dto';
+import { UserBotService } from '@modules/bot/services/user-bot.service';
 
 // API контроллер для управления подписками (с префиксом /api)
 @ApiTags('Subscriptions')
@@ -19,7 +22,11 @@ import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 export class SubscriptionsController {
   private readonly logger = new Logger(SubscriptionsController.name);
 
-  constructor(private readonly subscriptionsService: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptionsService: SubscriptionsService,
+    @Inject(forwardRef(() => UserBotService))
+    private readonly userBotService: UserBotService,
+  ) {}
 
   @Get()
   @ApiOperation({ 
@@ -77,6 +84,33 @@ export class SubscriptionsController {
     return {
       success: true,
       data: { subscriptionUrl: url },
+    };
+  }
+
+  @Post('send-message')
+  @ApiOperation({ 
+    summary: 'Отправить сообщение пользователям', 
+    description: 'Отправляет сообщение через Telegram бота. Если указан telegramId - отправляет одному пользователю, иначе - всем с активными подписками' 
+  })
+  @ApiBody({ type: SendMessageDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Результат отправки сообщений', 
+    schema: { 
+      example: { 
+        success: true, 
+        data: { sent: 10, failed: 0, errors: [] } 
+      } 
+    } 
+  })
+  async sendMessage(@Body() dto: SendMessageDto) {
+    this.logger.log(`Sending message${dto.telegramId ? ` to user ${dto.telegramId}` : ' to all users'}`);
+    
+    const result = await this.userBotService.sendMessage(dto.message, dto.telegramId);
+    
+    return {
+      success: true,
+      data: result,
     };
   }
 

@@ -43,7 +43,7 @@ async function bootstrap() {
 
   // Global prefix для API (исключая публичный эндпоинт /sub/:clientId)
   app.setGlobalPrefix('api', {
-    exclude: ['sub/:clientId'],
+    exclude: ['sub/:clientId', 'payment/approve'],
   });
 
   // Swagger только для development (после установки префикса)
@@ -69,7 +69,7 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'http://localhost:5173', // Vite dev server
-      'http://localhost:3000',
+      'http://localhost:3001',
       'https://sub.hyper-vpn.ru',
       appConfig?.baseUrl,
     ].filter(Boolean),

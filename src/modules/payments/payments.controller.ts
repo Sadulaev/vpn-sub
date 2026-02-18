@@ -5,12 +5,16 @@ import {
   Res,
   Logger,
   HttpStatus,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { Response } from 'express';
 import { PaymentsService } from './payments.service';
 import { RobokassaService } from './robokassa.service';
 import { PaymentNotificationService } from './payment-notification.service';
+import { SubscriptionsService } from '@modules/subscriptions';
+import { SubscriptionSource } from '@database/entities';
 
 interface RobokassaCallbackBody {
   OutSum: string;
@@ -28,6 +32,8 @@ export class PaymentsController {
     private readonly paymentsService: PaymentsService,
     private readonly robokassaService: RobokassaService,
     private readonly notificationService: PaymentNotificationService,
+    @Inject(forwardRef(() => SubscriptionsService))
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   @Post('approve')
@@ -70,14 +76,20 @@ export class PaymentsController {
       return res.send(`OK${InvId}`);
     }
 
-    // 4. Помечаем как оплаченный
-    // TODO: Интеграция с SubscriptionsService для создания подписки после оплаты
-    await this.paymentsService.markPaidAndSaveKey(InvId, '');
+    // 4. Создаем подписку
+    const result = await this.subscriptionsService.createSubscription({
+      telegramId: session.telegramId,
+      months: session.period,
+      source: SubscriptionSource.BOT,
+    });
 
-    // 5. Уведомляем пользователя
+    // 5. Помечаем платеж как оплаченный
+    await this.paymentsService.markPaid(InvId);
+
+    // 6. Уведомляем пользователя
     await this.notificationService.notifyPaymentSuccess(
       session.telegramId,
-      '',
+      result.subscriptionUrl,
       session.period,
     );
 
@@ -91,13 +103,13 @@ export class PaymentsController {
   @ApiExcludeEndpoint()
   async handleSuccess(@Res() res: Response) {
     // Редиректим пользователя обратно в бота
-    return res.redirect('https://t.me/hyper_vpn_bot');
+    return res.redirect('https://t.me/bekvpn_bot');
   }
 
   @Post('fail')
   @ApiExcludeEndpoint()
   async handleFail(@Res() res: Response) {
-    return res.redirect('https://t.me/hyper_vpn_bot');
+    return res.redirect('https://t.me/bekvpn_bot');
   }
 }
 

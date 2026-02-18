@@ -76,9 +76,9 @@ export class UserBotUpdate {
     await this.botService.showPlatformInstructions(ctx, 'tv');
   }
 
-  @Action(BotCallbacks.MyKeys)
-  async onMyKeys(@Ctx() ctx: CallbackContext): Promise<void> {
-    await this.botService.showMyKeys(ctx);
+  @Action(BotCallbacks.MySubscription)
+  async onMySubscription(@Ctx() ctx: CallbackContext): Promise<void> {
+    await this.botService.showMySubscription(ctx);
   }
 }
 
