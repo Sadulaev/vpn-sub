@@ -148,6 +148,30 @@ export class ServerPoolsService {
 
     const saved = await this.xuiServerRepo.save(server);
     this.logger.log(`Created server: ${saved.id} (${saved.name})`);
+
+    // Синхронизируем всех активных клиентов на новый сервер (асинхронно в фоне)
+    // Не блокируем ответ API, логируем результат
+    if (saved.status === XuiServerStatus.ACTIVE) {
+      this.xuiApi
+        .syncAllActiveClientsToServer(saved)
+        .then((result) => {
+          this.logger.log(
+            `Server ${saved.name} sync completed: ${result.success}/${result.total} clients added successfully`,
+          );
+          if (result.failed > 0) {
+            this.logger.warn(
+              `Server ${saved.name} sync had ${result.failed} failures. First 5 errors: ${result.errors.slice(0, 5).join('; ')}`,
+            );
+          }
+        })
+        .catch((error) => {
+          this.logger.error(
+            `Fatal error during server ${saved.name} sync:`,
+            error,
+          );
+        });
+    }
+
     return saved;
   }
 

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { XuiServer, XuiServerStatus } from '@database/entities';
+import { XuiServer, XuiServerStatus, Subscription, SubscriptionStatus, Client } from '@database/entities';
 import {
   XuiInboundsResponse,
   XuiInboundClient,
@@ -17,6 +17,10 @@ export class XuiApiService {
   constructor(
     @InjectRepository(XuiServer)
     private readonly xuiServerRepo: Repository<XuiServer>,
+    @InjectRepository(Subscription)
+    private readonly subscriptionRepo: Repository<Subscription>,
+    @InjectRepository(Client)
+    private readonly clientRepo: Repository<Client>,
   ) {}
 
   // ─── Авторизация ───
@@ -386,6 +390,117 @@ export class XuiApiService {
     );
 
     return { success, failed };
+  }
+
+  /**
+   * Синхронизировать всех активных клиентов на новый сервер
+   * Используется при добавлении нового сервера в систему
+   * 
+   * @param server - Новый сервер для синхронизации
+   * @param batchSize - Размер батча для параллельной обработки (default: 50)
+   * @returns Статистика синхронизации
+   */
+  async syncAllActiveClientsToServer(
+    server: XuiServer,
+    batchSize: number = 50,
+  ): Promise<{ total: number; success: number; failed: number; errors: string[] }> {
+    this.logger.log(`Starting sync of all active clients to server ${server.name} (id=${server.id})...`);
+
+    // Получаем всех клиентов с активными подписками
+    const activeSubscriptions = await this.subscriptionRepo.find({
+      where: { status: SubscriptionStatus.ACTIVE },
+      relations: ['client'],
+    });
+
+    // Удаляем дубликаты клиентов (если у одного клиента несколько активных подписок)
+    const uniqueClients = new Map<string, Client>();
+    for (const sub of activeSubscriptions) {
+      if (sub.client && !uniqueClients.has(sub.client.id)) {
+        uniqueClients.set(sub.client.id, sub.client);
+      }
+    }
+
+    const clientsArray = Array.from(uniqueClients.values());
+    const total = clientsArray.length;
+
+    if (total === 0) {
+      this.logger.log(`No active clients found for sync to ${server.name}`);
+      return { total: 0, success: 0, failed: 0, errors: [] };
+    }
+
+    this.logger.log(`Found ${total} unique active clients to sync to ${server.name}`);
+
+    // Авторизуемся на сервере
+    const cookie = await this.login(server);
+    if (!cookie) {
+      const error = `Failed to login to server ${server.name}`;
+      this.logger.error(error);
+      return { total, success: 0, failed: total, errors: [error] };
+    }
+
+    // Получаем inbound ID
+    const inboundId = await this.resolveInboundId(server, cookie);
+    if (!inboundId) {
+      const error = `No inbound found for server ${server.name}`;
+      this.logger.error(error);
+      return { total, success: 0, failed: total, errors: [error] };
+    }
+
+    // Батчевая обработка клиентов
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: string[] = [];
+
+    // Разбиваем на батчи
+    for (let i = 0; i < clientsArray.length; i += batchSize) {
+      const batch = clientsArray.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+      const totalBatches = Math.ceil(clientsArray.length / batchSize);
+
+      this.logger.log(`Processing batch ${batchNum}/${totalBatches} (${batch.length} clients)...`);
+
+      // Параллельно добавляем всех клиентов в текущем батче
+      const results = await Promise.allSettled(
+        batch.map(async (client) => {
+          const xuiClient: XuiInboundClient = {
+            id: client.id,
+            email: `client-${client.id.slice(0, 8)}`,
+            flow: server.flow || '',
+            totalGB: 0,
+            expiryTime: 0, // бессрочно
+            enable: true,
+          };
+
+          const added = await this.addClient(server, inboundId, xuiClient, cookie);
+          if (!added) {
+            throw new Error(`Failed to add client ${client.id}`);
+          }
+          return client.id;
+        }),
+      );
+
+      // Подсчитываем результаты батча
+      results.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
+          successCount++;
+        } else {
+          failedCount++;
+          const clientId = batch[idx].id;
+          const errorMsg = `Client ${clientId.slice(0, 8)}: ${result.reason?.message || 'Unknown error'}`;
+          errors.push(errorMsg);
+        }
+      });
+
+      this.logger.log(
+        `Batch ${batchNum}/${totalBatches} completed. Success: ${results.filter(r => r.status === 'fulfilled').length}, Failed: ${results.filter(r => r.status === 'rejected').length}`,
+      );
+    }
+
+    this.logger.log(
+      `Sync to ${server.name} completed. Total: ${total}, Success: ${successCount}, Failed: ${failedCount}`,
+    );
+
+    return { total, success: successCount, failed: failedCount, errors };
   }
 
   // ─── Утилиты ───
