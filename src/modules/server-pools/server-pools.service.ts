@@ -116,7 +116,10 @@ export class ServerPoolsService {
     });
   }
 
-  async createServer(dto: CreateServerDto): Promise<XuiServer> {
+  async createServer(dto: CreateServerDto): Promise<{
+    server: XuiServer;
+    syncResult: { total: number; success: number; failed: number };
+  }> {
     // Проверяем существование пула, если указан
     if (dto.serverPoolId) {
       const pool = await this.poolRepo.findOne({ where: { id: dto.serverPoolId } });
@@ -149,30 +152,59 @@ export class ServerPoolsService {
     const saved = await this.xuiServerRepo.save(server);
     this.logger.log(`Created server: ${saved.id} (${saved.name})`);
 
-    // Синхронизируем всех активных клиентов на новый сервер (асинхронно в фоне)
-    // Не блокируем ответ API, логируем результат
+    // Синхронизируем всех активных клиентов на новый сервер
+    let syncResult = { total: 0, success: 0, failed: 0 };
+    
     if (saved.status === XuiServerStatus.ACTIVE) {
-      this.xuiApi
-        .syncAllActiveClientsToServer(saved)
-        .then((result) => {
-          this.logger.log(
-            `Server ${saved.name} sync completed: ${result.success}/${result.total} clients added successfully`,
+      try {
+        const result = await this.xuiApi.syncAllActiveClientsToServer(saved);
+        syncResult = {
+          total: result.total,
+          success: result.success,
+          failed: result.failed,
+        };
+        this.logger.log(
+          `Server ${saved.name} sync completed: ${result.success}/${result.total} clients added successfully`,
+        );
+        if (result.failed > 0) {
+          this.logger.warn(
+            `Server ${saved.name} sync had ${result.failed} failures. First 5 errors: ${result.errors.slice(0, 5).join('; ')}`,
           );
-          if (result.failed > 0) {
-            this.logger.warn(
-              `Server ${saved.name} sync had ${result.failed} failures. First 5 errors: ${result.errors.slice(0, 5).join('; ')}`,
-            );
-          }
-        })
-        .catch((error) => {
-          this.logger.error(
-            `Fatal error during server ${saved.name} sync:`,
-            error,
-          );
-        });
+        }
+      } catch (error) {
+        this.logger.error(`Failed to sync clients to new server ${saved.name}:`, error);
+      }
     }
 
-    return saved;
+    return { server: saved, syncResult };
+  }
+
+  /**
+   * Синхронизировать клиентов на сервере
+   */
+  async syncServerClients(serverId: number): Promise<{
+    total: number;
+    success: number;
+    failed: number;
+    errors: string[];
+  }> {
+    const server = await this.findServerById(serverId);
+    
+    if (!server) {
+      throw new NotFoundException(`Server with ID ${serverId} not found`);
+    }
+    
+    if (server.status !== XuiServerStatus.ACTIVE) {
+      throw new Error(`Server ${server.name} is not active`);
+    }
+
+    const result = await this.xuiApi.syncAllActiveClientsToServer(server);
+    
+    this.logger.log(
+      `Server ${server.name} manual sync completed: ${result.success}/${result.total} clients synced`,
+    );
+
+    return result;
   }
 
   async updateServer(id: number, dto: UpdateServerDto): Promise<XuiServer> {

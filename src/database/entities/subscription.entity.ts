@@ -44,6 +44,10 @@ export class Subscription {
   })
   source!: SubscriptionSource;
 
+  /** Примечание к подписке */
+  @Column({ type: 'text', nullable: true })
+  note: string | null = null;
+
   /** Период подписки в месяцах */
   @Column({ type: 'int' })
   months!: number;

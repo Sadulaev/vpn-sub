@@ -9,12 +9,14 @@ import {
   HttpStatus,
   Inject,
   forwardRef,
+  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionDto, SendMessageDto } from './dto';
 import { UserBotService } from '@modules/bot/services/user-bot.service';
+import { SubscriptionSource } from '@database/entities';
 
 // API контроллер для управления подписками (с префиксом /api)
 @ApiTags('Subscriptions')
@@ -30,18 +32,41 @@ export class SubscriptionsController {
 
   @Get()
   @ApiOperation({ 
-    summary: 'Получить все подписки', 
-    description: 'Возвращает список всех подписок в системе' 
+    summary: 'Поиск подписок', 
+    description: 'Возвращает список подписок с фильтрацией и поиском' 
   })
+  @ApiQuery({ name: 'search', required: false, description: 'Поиск по clientId или примечанию' })
+  @ApiQuery({ name: 'source', required: false, enum: SubscriptionSource, description: 'Фильтр по источнику' })
   @ApiResponse({ status: 200, description: 'Список подписок успешно получен' })
-  async getAllSubscriptions() {
-    return this.subscriptionsService.findAll();
+  async getAllSubscriptions(
+    @Query('search') search?: string,
+    @Query('source') source?: SubscriptionSource,
+  ) {
+    return this.subscriptionsService.search({ search, source });
   }
 
   @Post()
   @ApiOperation({ summary: 'Создать подписку', description: 'Создаёт подписку, регистрирует клиента на всех 3x-ui серверах и создает подписку на указанный период.' })
   @ApiBody({ type: CreateSubscriptionDto })
-  @ApiResponse({ status: 201, description: 'Подписка создана', schema: { example: { success: true, data: { subscriptionId: 'uuid', clientId: 'uuid', subscriptionUrl: 'http://localhost:3000/sub/uuid', servers: { success: ['Germany-1'], failed: [] } } } } })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Подписка создана', 
+    schema: { 
+      example: { 
+        success: true, 
+        data: { 
+          subscriptionId: 'uuid', 
+          clientId: 'uuid', 
+          subscriptionUrl: 'http://localhost:3000/sub/uuid', 
+          serversTotal: 5,
+          serversSuccess: 4,
+          serversFailed: 1,
+          successServers: ['Germany-1', 'France-1'],
+          failedServers: ['US-1']
+        } 
+      } 
+    } 
+  })
   async createSubscription(@Body() dto: CreateSubscriptionDto) {
     this.logger.log(`Creating subscription for ${dto.months} months`);
 
@@ -53,7 +78,11 @@ export class SubscriptionsController {
         subscriptionId: result.subscriptionId,
         clientId: result.clientId,
         subscriptionUrl: result.subscriptionUrl,
-        servers: result.serverResults,
+        serversTotal: result.serverResults.success.length + result.serverResults.failed.length,
+        serversSuccess: result.serverResults.success.length,
+        serversFailed: result.serverResults.failed.length,
+        successServers: result.serverResults.success,
+        failedServers: result.serverResults.failed,
       },
     };
   }

@@ -91,6 +91,7 @@ export class SubscriptionsService {
       telegramId: dto.telegramId || null,
       status: SubscriptionStatus.ACTIVE,
       source: dto.source || SubscriptionSource.ADMIN,
+      note: dto.note || null,
       months: dto.months,
       startDate,
       endDate,
@@ -118,6 +119,33 @@ export class SubscriptionsService {
     return this.subscriptionRepo.find({
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /**
+   * Поиск подписок с фильтрацией
+   */
+  async search(params: {
+    search?: string;
+    source?: SubscriptionSource;
+  }): Promise<Subscription[]> {
+    const query = this.subscriptionRepo.createQueryBuilder('subscription');
+
+    // Фильтр по источнику
+    if (params.source) {
+      query.andWhere('subscription.source = :source', { source: params.source });
+    }
+
+    // Поиск по clientId или note
+    if (params.search) {
+      query.andWhere(
+        '(subscription.clientId ILIKE :search OR subscription.note ILIKE :search)',
+        { search: `%${params.search}%` }
+      );
+    }
+
+    query.orderBy('subscription.createdAt', 'DESC');
+
+    return query.getMany();
   }
 
   /**

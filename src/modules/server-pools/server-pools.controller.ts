@@ -70,7 +70,16 @@ export class ServerPoolsController {
     summary: 'Добавить новый сервер', 
     description: 'Создаёт новый XUI сервер с параметрами подключения к панели 3x-ui и настройками VLESS' 
   })
-  @ApiResponse({ status: 201, description: 'Сервер успешно создан' })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Сервер успешно создан',
+    schema: {
+      example: {
+        server: { id: 1, name: 'Germany-1' },
+        syncResult: { total: 40, success: 38, failed: 2 }
+      }
+    }
+  })
   @ApiResponse({ status: 400, description: 'Некорректные данные' })
   @ApiResponse({ status: 404, description: 'Указанный пул не найден' })
   async createServer(@Body() dto: CreateServerDto) {
@@ -101,6 +110,29 @@ export class ServerPoolsController {
   @ApiResponse({ status: 404, description: 'Сервер не найден' })
   async deleteServer(@Param('id', ParseIntPipe) id: number) {
     return this.serverPoolsService.deleteServer(id);
+  }
+
+  @Post('servers/:id/sync')
+  @ApiOperation({ 
+    summary: 'Синхронизировать клиентов', 
+    description: 'Сравнивает все активные подписки с пользователями на сервере и добавляет отсутствующих' 
+  })
+  @ApiParam({ name: 'id', description: 'ID сервера' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Синхронизация завершена',
+    schema: {
+      example: {
+        total: 50,
+        success: 48,
+        failed: 2,
+        errors: ['Client abc123: Connection timeout']
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: 'Сервер не найден' })
+  async syncServerClients(@Param('id', ParseIntPipe) id: number) {
+    return this.serverPoolsService.syncServerClients(id);
   }
 
   // ─── Статистика ───

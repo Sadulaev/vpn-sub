@@ -38,4 +38,13 @@ export class CreateSubscriptionDto {
   @IsEnum(SubscriptionSource)
   @IsOptional()
   source?: SubscriptionSource;
+
+  /** Примечание к подписке */
+  @ApiPropertyOptional({ 
+    example: 'Тестовый пользователь', 
+    description: 'Примечание к подписке (опционально)' 
+  })
+  @IsString()
+  @IsOptional()
+  note?: string;
 }
