@@ -80,5 +80,10 @@ export class UserBotUpdate {
   async onMySubscription(@Ctx() ctx: CallbackContext): Promise<void> {
     await this.botService.showMySubscription(ctx);
   }
+
+  @Action(BotCallbacks.GetTrial)
+  async onGetTrial(@Ctx() ctx: CallbackContext): Promise<void> {
+    await this.botService.handleGetTrial(ctx);
+  }
 }
 

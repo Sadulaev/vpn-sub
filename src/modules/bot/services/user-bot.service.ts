@@ -1,12 +1,10 @@
 import { Injectable, Logger, Inject, forwardRef } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { Markup, Telegraf } from "telegraf";
-import { User } from "@database/entities";
 import { PaymentsService, RobokassaService } from "@modules/payments";
 import { GoogleSheetsService } from "@modules/google-sheets";
 import { SubscriptionsService } from "@modules/subscriptions";
+import { SubscriptionSource } from "@database/entities";
 import { BotCallbacks } from "../constants/callbacks";
 import { BotMessages } from "../constants/messages";
 import { MessageContext, CallbackContext } from "../types/context";
@@ -19,8 +17,6 @@ export class UserBotService {
   private readonly bot: Telegraf;
 
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
     private readonly configService: ConfigService,
     @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
@@ -53,35 +49,127 @@ export class UserBotService {
    */
   async handleStart(ctx: MessageContext): Promise<void> {
     const telegramId = ctx.message.from?.id.toString();
-    const firstName = ctx.message.from?.first_name || "";
-    const username = ctx.message.from?.username || "";
 
-    // Сохраняем/обновляем пользователя
-    let user = await this.userRepository.findOne({ where: { telegramId } });
-
-    if (!user) {
-      user = this.userRepository.create({
-        telegramId,
-        firstName,
-        username,
-      });
-      await this.userRepository.save(user);
-
-      // Записываем в Google Sheets
-      if (telegramId) {
-        try {
-          await this.googleSheetsService.appendRow("Лист3", [
-            telegramId,
-            firstName,
-            username,
-          ]);
-        } catch (error) {
-          this.logger.error("Failed to save user to Google Sheets:", error);
-        }
-      }
+    if (!telegramId) {
+      await ctx.reply("Ошибка: не удалось получить ваш Telegram ID");
+      return;
     }
 
-    await this.sendMainMenu(ctx);
+    // Проверяем наличие ЛЮБЫХ подписок (даже истекших)
+    const allSubscriptions = await this.subscriptionsService.getAllSubscriptionsByTelegramId(telegramId);
+
+    if (allSubscriptions.length === 0) {
+      // Пользователь новый - показываем кнопку для получения пробного периода
+      await this.sendTrialOffer(ctx);
+    } else {
+      // Пользователь уже был - показываем обычное меню
+      await this.sendMainMenu(ctx);
+    }
+  }
+
+  /**
+   * Отправить предложение пробного периода
+   */
+  async sendTrialOffer(ctx: MessageContext | CallbackContext): Promise<void> {
+    const buttons = Markup.inlineKeyboard(
+      [
+        {
+          text: "🎁 Получить пробный период (3 дня)",
+          callback_data: BotCallbacks.GetTrial,
+        },
+      ],
+      { columns: 1 }
+    );
+
+    const message = `🎉 <b>Добро пожаловать в HyperVPN!</b>\n\n` +
+      `Мы дарим вам <b>бесплатный пробный период на 3 дня</b>!\n\n` +
+      `✨ Что вы получите:\n` +
+      `• Доступ ко всем серверам\n` +
+      `• Безлимитный трафик\n` +
+      `• Высокую скорость соединения\n\n` +
+      `Нажмите кнопку ниже, чтобы активировать пробный период.`;
+
+    await ctx.replyWithPhoto(
+      { source: "./assets/hyper-vpn-menu.jpg" },
+      {
+        caption: message,
+        parse_mode: "HTML",
+        reply_markup: buttons.reply_markup,
+      }
+    );
+  }
+
+  /**
+   * Создать пробную подписку
+   */
+  async handleGetTrial(ctx: CallbackContext): Promise<void> {
+    await ctx.answerCbQuery();
+
+    const telegramId = ctx.callbackQuery.from.id.toString();
+    const firstName = ctx.callbackQuery.from.first_name || "";
+    const username = ctx.callbackQuery.from.username || "";
+
+    // Дополнительная проверка - может пользователь уже использовал пробный период
+    const allSubscriptions = await this.subscriptionsService.getAllSubscriptionsByTelegramId(telegramId);
+
+    if (allSubscriptions.length > 0) {
+      await ctx.reply(
+        "⚠️ Вы уже использовали пробный период. Приобретите подписку для продолжения использования.",
+        { parse_mode: 'HTML' }
+      );
+      await this.sendMainMenu(ctx);
+      return;
+    }
+
+    try {
+      // Создаем пробную подписку на 3 дня
+      const result = await this.subscriptionsService.createSubscription({
+        telegramId,
+        months: 0, // Специальное значение для пробного периода
+        source: SubscriptionSource.BOT,
+      });
+
+      this.logger.log(`Created trial subscription for user ${telegramId}: ${result.subscriptionId}`);
+
+      // Записываем в Google Sheets
+      try {
+        await this.googleSheetsService.appendRow("Лист3", [
+          telegramId,
+          firstName,
+          username,
+          new Date().toISOString(),
+          'trial',
+        ]);
+      } catch (error) {
+        this.logger.error("Failed to save user to Google Sheets:", error);
+      }
+
+      // Отправляем подписку
+      const baseUrl = this.configService.get<string>('app.baseUrl', 'http://localhost:3000');
+      const subscriptionUrl = `${baseUrl}/sub/${result.clientId}`;
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 3);
+
+      try {
+        await ctx.deleteMessage();
+      } catch {}
+
+      await ctx.reply(
+        `✅ <b>Пробный период активирован!</b>\n\n` +
+        `🔗 <b>Ссылка на подписку:</b>\n<code>${subscriptionUrl}</code>\n\n` +
+        `📅 <b>Действует до:</b> ${endDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}\n\n` +
+        `📱 Скопируйте эту ссылку в ваше VPN-приложение (v2rayNG, Streisand, Happ и др.)\n` +
+        `👉 Также доступна в разделе "Моя подписка"`,
+        { parse_mode: 'HTML' }
+      );
+
+      await this.sendMainMenu(ctx);
+    } catch (error) {
+      this.logger.error(`Failed to create trial subscription for ${telegramId}:`, error);
+      await ctx.reply(
+        "⚠️ Произошла ошибка при создании пробной подписки. Обратитесь в поддержку."
+      );
+    }
   }
 
   /**
@@ -298,7 +386,6 @@ export class UserBotService {
 
       message = `<b>✅ Ваша подписка активна!</b>\n\n` +
         `📅 <b>Действует до:</b> ${endDate}\n` +
-        `📋 <b>Период:</b> ${subscription.months} мес${subscription.months === 1 ? 'яц' : subscription.months >= 5 ? 'ев' : 'яца'}\n\n` +
         `🔗 <b>Ссылка на подписку:</b>\n<code>${subscriptionUrl}</code>\n\n` +
         `📱 Скопируйте эту ссылку в ваше VPN-приложение (v2rayNG, Streisand, Happ и др.)`;
     }

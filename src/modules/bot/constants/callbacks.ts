@@ -22,5 +22,6 @@ export enum BotCallbacks {
 
   // Подписка
   MySubscription = 'my_subscription',
+  GetTrial = 'get_trial',
 }
 

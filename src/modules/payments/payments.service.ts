@@ -33,8 +33,6 @@ export class PaymentsService {
       ? new Date(Date.now() + dto.ttlMinutes * 60_000)
       : null;
 
-    const keyExpiresAt = this.addMonthsPlusOneDay(dto.period);
-
     const session = this.paymentRepository.create({
       invId,
       telegramId: dto.telegramId,
@@ -42,7 +40,6 @@ export class PaymentsService {
       amount: dto.amount,
       status: 'pending',
       expiresAt,
-      keyExpiresAt,
     });
 
     const saved = await this.paymentRepository.save(session);
@@ -81,60 +78,6 @@ export class PaymentsService {
    */
   async findByInvId(invId: string): Promise<PaymentSession | null> {
     return this.paymentRepository.findOne({ where: { invId } });
-  }
-
-  /**
-   * Получить активные ключи пользователя (оплаченные и не истекшие)
-   */
-  async getActiveKeysByTelegramId(telegramId: string): Promise<PaymentSession[]> {
-    const now = new Date();
-
-    const sessions = await this.paymentRepository.find({
-      where: {
-        telegramId,
-        status: 'paid',
-        keyExpiresAt: MoreThan(now),
-      },
-      order: {
-        createdAt: 'DESC',
-      },
-    });
-
-    // Фильтруем только те, у которых есть ключ
-    return sessions.filter((s) => s.vlessKey);
-  }
-
-  /**
-   * Найти платёж по clientId (UUID из vlessKey)
-   * vlessKey имеет формат: vless://{clientId}@...
-   */
-  async findByClientId(clientId: string): Promise<PaymentSession | null> {
-    const sessions = await this.paymentRepository.find({
-      where: { status: 'paid' },
-    });
-
-    // Ищем сессию где vlessKey содержит clientId
-    return sessions.find((s) => s.vlessKey?.includes(clientId)) || null;
-  }
-
-  /**
-   * Найти все платежи по списку clientId
-   */
-  async findByClientIds(clientIds: string[]): Promise<Map<string, PaymentSession>> {
-    const sessions = await this.paymentRepository.find({
-      where: { status: 'paid' },
-    });
-
-    const result = new Map<string, PaymentSession>();
-
-    for (const clientId of clientIds) {
-      const session = sessions.find((s) => s.vlessKey?.includes(clientId));
-      if (session) {
-        result.set(clientId, session);
-      }
-    }
-
-    return result;
   }
 
   /**

@@ -76,8 +76,15 @@ export class SubscriptionsService {
     // 3. Создать подписку
     const startDate = new Date();
     const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + dto.months);
-    endDate.setDate(endDate.getDate() + 1); // +1 день запаса
+    
+    // Если months === 0, это пробный период на 3 дня
+    if (dto.months === 0) {
+      endDate.setDate(endDate.getDate() + 3);
+      this.logger.log(`Creating trial subscription for 3 days`);
+    } else {
+      endDate.setMonth(endDate.getMonth() + dto.months);
+      endDate.setDate(endDate.getDate() + 1); // +1 день запаса
+    }
 
     const subscription = this.subscriptionRepo.create({
       clientId,
@@ -285,6 +292,16 @@ export class SubscriptionsService {
         status: SubscriptionStatus.ACTIVE,
       },
       order: { endDate: 'DESC' },
+    });
+  }
+
+  /**
+   * Получить все подписки по telegramId (включая истекшие)
+   */
+  async getAllSubscriptionsByTelegramId(telegramId: string): Promise<Subscription[]> {
+    return this.subscriptionRepo.find({
+      where: { telegramId },
+      order: { createdAt: 'DESC' },
     });
   }
 

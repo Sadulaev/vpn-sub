@@ -4,10 +4,7 @@ import {
   Column,
   CreateDateColumn,
   Index,
-  ManyToOne,
-  JoinColumn,
 } from 'typeorm';
-import { User } from './user.entity';
 
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'expired';
 
@@ -34,20 +31,10 @@ export class PaymentSession {
   @Column({ type: 'int' })
   amount!: number;
 
-  @Column({ type: 'text', nullable: true })
-  vlessKey: string | null = null;
-
   @CreateDateColumn()
   createdAt!: Date;
 
   @Column({ type: 'timestamptz', nullable: true })
   expiresAt: Date | null = null;
-
-  @Column({ type: 'timestamptz', nullable: true })
-  keyExpiresAt: Date | null = null;
-
-  @ManyToOne(() => User, (user) => user.paymentSessions, { nullable: true })
-  @JoinColumn({ name: 'telegramId', referencedColumnName: 'telegramId' })
-  user?: User;
 }
 

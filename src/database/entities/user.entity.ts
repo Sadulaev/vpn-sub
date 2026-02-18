@@ -4,9 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
 } from 'typeorm';
-import { PaymentSession } from './payment-session.entity';
 
 @Entity('users')
 export class User {
@@ -30,8 +28,5 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt!: Date;
-
-  @OneToMany(() => PaymentSession, (session) => session.user)
-  paymentSessions!: PaymentSession[];
 }
 
