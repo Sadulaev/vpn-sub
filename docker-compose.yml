@@ -5,13 +5,14 @@ services:
     image: postgres:15-alpine
     container_name: hyper-vpn-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: vpn
+      POSTGRES_PASSWORD: neron
       POSTGRES_DB: hyper_vpn
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
