@@ -11,7 +11,6 @@ import { PaymentsModule } from '@modules/payments';
 import { GoogleSheetsModule } from '@modules/google-sheets';
 import { UserBotModule } from '@modules/bot/user-bot.module';
 import { XuiApiModule } from '@modules/xui-api';
-import { ClientsModule } from '@modules/clients';
 import { ServerPoolsModule } from '@modules/server-pools';
 import { SubscriptionsModule } from '@modules/subscriptions';
 import { TasksModule } from '@modules/tasks';
@@ -56,7 +55,6 @@ const userBotSessions = new LocalSession({ database: 'sessions/user_bot.json' })
 
     // Функциональные модули
     XuiApiModule,
-    ClientsModule,
     ServerPoolsModule,
     SubscriptionsModule,
     PaymentsModule,

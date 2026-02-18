@@ -4,16 +4,18 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
   Index,
 } from 'typeorm';
-import { Client } from './client.entity';
 
 export enum SubscriptionStatus {
   ACTIVE = 'active',
   EXPIRED = 'expired',
   CANCELLED = 'cancelled',
+}
+
+export enum SubscriptionSource {
+  ADMIN = 'admin',
+  BOT = 'bot',
 }
 
 @Entity('subscriptions')
@@ -25,9 +27,8 @@ export class Subscription {
   @Column({ type: 'uuid' })
   clientId!: string;
 
-  @ManyToOne(() => Client, (client) => client.subscriptions, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'clientId' })
-  client!: Client;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  telegramId: string | null = null;
 
   @Column({
     type: 'enum',
@@ -35,6 +36,13 @@ export class Subscription {
     default: SubscriptionStatus.ACTIVE,
   })
   status!: SubscriptionStatus;
+
+  @Column({
+    type: 'enum',
+    enum: SubscriptionSource,
+    default: SubscriptionSource.ADMIN,
+  })
+  source!: SubscriptionSource;
 
   /** Период подписки в месяцах */
   @Column({ type: 'int' })

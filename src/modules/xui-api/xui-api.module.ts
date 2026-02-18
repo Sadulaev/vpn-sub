@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { XuiServer, Subscription, Client } from '@database/entities';
+import { XuiServer, Subscription } from '@database/entities';
 import { XuiApiService } from './xui-api.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([XuiServer, Subscription, Client])],
+  imports: [TypeOrmModule.forFeature([XuiServer, Subscription])],
   providers: [XuiApiService],
   exports: [XuiApiService],
 })

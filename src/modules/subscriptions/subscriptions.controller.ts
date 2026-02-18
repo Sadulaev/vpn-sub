@@ -32,11 +32,11 @@ export class SubscriptionsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Создать подписку', description: 'Создаёт клиента (если не существует), регистрирует его на всех 3x-ui серверах и создаёт подписку на указанный период. Открытый эндпоинт (позже будет связан с оплатой).' })
+  @ApiOperation({ summary: 'Создать подписку', description: 'Создаёт подписку, регистрирует клиента на всех 3x-ui серверах и создает подписку на указанный период.' })
   @ApiBody({ type: CreateSubscriptionDto })
   @ApiResponse({ status: 201, description: 'Подписка создана', schema: { example: { success: true, data: { subscriptionId: 'uuid', clientId: 'uuid', subscriptionUrl: 'http://localhost:3000/sub/uuid', servers: { success: ['Germany-1'], failed: [] } } } } })
   async createSubscription(@Body() dto: CreateSubscriptionDto) {
-    this.logger.log(`Creating subscription for tg:${dto.telegramId}, ${dto.months} months`);
+    this.logger.log(`Creating subscription for ${dto.months} months`);
 
     const result = await this.subscriptionsService.createSubscription(dto);
 
@@ -64,20 +64,6 @@ export class SubscriptionsController {
     };
   }
 
-  @Get('telegram/:telegramId')
-  @ApiOperation({ summary: 'Подписки по Telegram ID', description: 'Возвращает список активных подписок клиента по его Telegram ID.' })
-  @ApiParam({ name: 'telegramId', description: 'Telegram ID пользователя', example: '123456789' })
-  @ApiResponse({ status: 200, description: 'Список активных подписок', schema: { example: { success: true, data: [{ id: 'uuid', clientId: 'uuid', status: 'active', months: 3, startDate: '2026-02-16', endDate: '2026-05-17' }] } } })
-  async getByTelegramId(@Param('telegramId') telegramId: string) {
-    const subscriptions =
-      await this.subscriptionsService.getActiveSubscriptionsByTelegramId(telegramId);
-
-    return {
-      success: true,
-      data: subscriptions,
-    };
-  }
-
   @Get(':id/url')
   @ApiOperation({ 
     summary: 'Получить URL подписки', 
@@ -91,6 +77,23 @@ export class SubscriptionsController {
     return {
       success: true,
       data: { subscriptionUrl: url },
+    };
+  }
+
+  @Post(':id/delete')
+  @ApiOperation({ 
+    summary: 'Удалить подписку', 
+    description: 'Удаляет подписку и клиента со всех серверов (если нет других активных подписок)' 
+  })
+  @ApiParam({ name: 'id', description: 'ID подписки', example: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Подписка удалена' })
+  async deleteSubscription(@Param('id') id: string) {
+    this.logger.log(`Deleting subscription ${id}`);
+    const result = await this.subscriptionsService.deleteSubscription(id);
+    
+    return {
+      success: true,
+      data: result,
     };
   }
 }

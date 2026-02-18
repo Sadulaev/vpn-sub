@@ -2,13 +2,14 @@ import { Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import {
   Subscription,
   SubscriptionStatus,
+  SubscriptionSource,
   XuiServer,
   XuiServerStatus,
 } from '@database/entities';
-import { ClientsService } from '@modules/clients';
 import { ServerPoolsService } from '@modules/server-pools';
 import { XuiApiService } from '@modules/xui-api';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
@@ -32,7 +33,6 @@ export class SubscriptionsService {
     private readonly subscriptionRepo: Repository<Subscription>,
     @InjectRepository(XuiServer)
     private readonly xuiServerRepo: Repository<XuiServer>,
-    private readonly clientsService: ClientsService,
     private readonly serverPoolsService: ServerPoolsService,
     private readonly xuiApi: XuiApiService,
     private readonly configService: ConfigService,
@@ -40,7 +40,7 @@ export class SubscriptionsService {
 
   /**
    * Создать подписку для клиента.
-   * 1. Найти или создать клиента в БД
+   * 1. Генерировать или использовать переданный clientId
    * 2. Создать клиента на всех активных XUI серверах (бессрочно)
    * 3. Создать запись подписки
    * 4. Вернуть subscription URL
@@ -51,22 +51,18 @@ export class SubscriptionsService {
     subscriptionUrl: string;
     serverResults: { success: string[]; failed: string[] };
   }> {
-    // 1. Найти или создать клиента
-    const client = await this.clientsService.findOrCreate(
-      dto.telegramId,
-      dto.username,
-      dto.firstName,
-    );
+    // 1. Генерировать или использовать переданный clientId
+    const clientId = dto.clientId || randomUUID();
 
     // 2. Создать клиента на всех активных серверах
     const activeServers = await this.serverPoolsService.findAllActiveServers();
     const serverResults = await this.xuiApi.createClientOnAllServers(
-      client.id,
+      clientId,
       activeServers,
     );
 
     this.logger.log(
-      `Client ${client.id} created on servers: ${serverResults.success.length} ok, ${serverResults.failed.length} failed`,
+      `Client ${clientId} created on servers: ${serverResults.success.length} ok, ${serverResults.failed.length} failed`,
     );
 
     // 3. Создать подписку
@@ -76,8 +72,10 @@ export class SubscriptionsService {
     endDate.setDate(endDate.getDate() + 1); // +1 день запаса
 
     const subscription = this.subscriptionRepo.create({
-      clientId: client.id,
+      clientId,
+      telegramId: dto.telegramId || null,
       status: SubscriptionStatus.ACTIVE,
+      source: dto.source || SubscriptionSource.ADMIN,
       months: dto.months,
       startDate,
       endDate,
@@ -85,15 +83,15 @@ export class SubscriptionsService {
     await this.subscriptionRepo.save(subscription);
 
     this.logger.log(
-      `Subscription ${subscription.id} created for client ${client.id}, expires ${endDate.toISOString()}`,
+      `Subscription ${subscription.id} created for client ${clientId}, expires ${endDate.toISOString()}`,
     );
 
     const baseUrl = this.configService.get<string>('app.baseUrl', 'http://localhost:3000');
 
     return {
       subscriptionId: subscription.id,
-      clientId: client.id,
-      subscriptionUrl: `${baseUrl}/sub/${client.id}`,
+      clientId,
+      subscriptionUrl: `${baseUrl}/sub/${clientId}`,
       serverResults,
     };
   }
@@ -103,7 +101,6 @@ export class SubscriptionsService {
    */
   async findAll(): Promise<Subscription[]> {
     return this.subscriptionRepo.find({
-      relations: ['client'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -130,12 +127,6 @@ export class SubscriptionsService {
    * Формат: base64(lines of vless://) — стандарт для v2raytun, happ и т.д.
    */
   async getSubscriptionContent(clientUuid: string): Promise<SubscriptionResult | null> {
-    // Проверяем что клиент существует
-    const client = await this.clientsService.findById(clientUuid);
-    if (!client) {
-      throw new NotFoundException('Client not found');
-    }
-
     // Проверяем есть ли активная подписка
     const activeSubscription = await this.subscriptionRepo.findOne({
       where: {
@@ -207,7 +198,6 @@ export class SubscriptionsService {
         status: SubscriptionStatus.ACTIVE,
         endDate: LessThanOrEqual(now),
       },
-      relations: ['client'],
     });
 
     if (expiredSubs.length === 0) {
@@ -215,7 +205,7 @@ export class SubscriptionsService {
     }
 
     // Собираем уникальные clientId
-    const uniqueClientIds = [...new Set(expiredSubs.map((s) => s.clientId))];
+    const uniqueClientIds: string[] = [...new Set<string>(expiredSubs.map((s: Subscription) => s.clientId))];
     const clientsRemoved: string[] = [];
 
     // Для каждого клиента проверяем, нет ли других активных подписок
@@ -253,7 +243,7 @@ export class SubscriptionsService {
 
     // Обновляем статусы подписок
     await this.subscriptionRepo.update(
-      { id: In(expiredSubs.map((s) => s.id)) },
+      { id: In(expiredSubs.map((s: Subscription) => s.id)) },
       { status: SubscriptionStatus.EXPIRED },
     );
 
@@ -265,15 +255,12 @@ export class SubscriptionsService {
   }
 
   /**
-   * Получить активные подписки клиента по telegramId
+   * Получить активные подписки клиента по clientId
    */
-  async getActiveSubscriptionsByTelegramId(telegramId: string): Promise<Subscription[]> {
-    const client = await this.clientsService.findByTelegramId(telegramId);
-    if (!client) return [];
-
+  async getActiveSubscriptionsByClientId(clientId: string): Promise<Subscription[]> {
     return this.subscriptionRepo.find({
       where: {
-        clientId: client.id,
+        clientId,
         status: SubscriptionStatus.ACTIVE,
       },
       order: { endDate: 'DESC' },
@@ -288,5 +275,59 @@ export class SubscriptionsService {
       where: { clientId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /**
+   * Удалить подписку и клиента со всех серверов (если нет других активных подписок)
+   */
+  async deleteSubscription(subscriptionId: string): Promise<{
+    deleted: boolean;
+    clientRemoved: boolean;
+    serverResults?: { success: string[]; failed: string[] };
+  }> {
+    const subscription = await this.subscriptionRepo.findOne({
+      where: { id: subscriptionId },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    const clientId = subscription.clientId;
+
+    // Удаляем подписку
+    await this.subscriptionRepo.remove(subscription);
+    this.logger.log(`Subscription ${subscriptionId} deleted`);
+
+    // Проверяем есть ли другие активные подписки у этого клиента
+    const otherActiveSubs = await this.subscriptionRepo.count({
+      where: {
+        clientId,
+        status: SubscriptionStatus.ACTIVE,
+      },
+    });
+
+    // Если других активных подписок нет - удаляем клиента со всех серверов
+    if (otherActiveSubs === 0) {
+      const allServers = await this.xuiServerRepo.find({
+        where: { status: In([XuiServerStatus.ACTIVE, XuiServerStatus.FAILED]) },
+      });
+
+      const serverResults = await this.xuiApi.deleteClientFromAllServers(clientId, allServers);
+      this.logger.log(
+        `Client ${clientId} removed from servers: ${serverResults.success.length} ok, ${serverResults.failed.length} failed`,
+      );
+
+      return {
+        deleted: true,
+        clientRemoved: true,
+        serverResults,
+      };
+    }
+
+    return {
+      deleted: true,
+      clientRemoved: false,
+    };
   }
 }

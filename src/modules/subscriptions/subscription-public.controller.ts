@@ -54,7 +54,7 @@ export class SubscriptionPublicController {
       res.setHeader('subscription-userinfo', userinfo);
       
       // Ссылка на бот (опционально)
-      res.setHeader('profile-web-page-url', 'https://t.me/hyper_vpn_bot');
+      res.setHeader('profile-web-page-url', 'https://t.me/bekvpn_bot');
 
       return res.send(result.content);
     } catch (error: any) {

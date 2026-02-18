@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { XuiServer, XuiServerStatus, Subscription, SubscriptionStatus, Client } from '@database/entities';
+import { XuiServer, XuiServerStatus, Subscription, SubscriptionStatus } from '@database/entities';
 import {
   XuiInboundsResponse,
   XuiInboundClient,
@@ -19,8 +19,6 @@ export class XuiApiService {
     private readonly xuiServerRepo: Repository<XuiServer>,
     @InjectRepository(Subscription)
     private readonly subscriptionRepo: Repository<Subscription>,
-    @InjectRepository(Client)
-    private readonly clientRepo: Repository<Client>,
   ) {}
 
   // ─── Авторизация ───
@@ -409,19 +407,11 @@ export class XuiApiService {
     // Получаем всех клиентов с активными подписками
     const activeSubscriptions = await this.subscriptionRepo.find({
       where: { status: SubscriptionStatus.ACTIVE },
-      relations: ['client'],
     });
 
-    // Удаляем дубликаты клиентов (если у одного клиента несколько активных подписок)
-    const uniqueClients = new Map<string, Client>();
-    for (const sub of activeSubscriptions) {
-      if (sub.client && !uniqueClients.has(sub.client.id)) {
-        uniqueClients.set(sub.client.id, sub.client);
-      }
-    }
-
-    const clientsArray = Array.from(uniqueClients.values());
-    const total = clientsArray.length;
+    // Удаляем дубликаты clientId (если у одного клиента несколько активных подписок)
+    const uniqueClientIds = [...new Set(activeSubscriptions.map(sub => sub.clientId))];
+    const total = uniqueClientIds.length;
 
     if (total === 0) {
       this.logger.log(`No active clients found for sync to ${server.name}`);
@@ -452,19 +442,19 @@ export class XuiApiService {
     const errors: string[] = [];
 
     // Разбиваем на батчи
-    for (let i = 0; i < clientsArray.length; i += batchSize) {
-      const batch = clientsArray.slice(i, i + batchSize);
+    for (let i = 0; i < uniqueClientIds.length; i += batchSize) {
+      const batch = uniqueClientIds.slice(i, i + batchSize);
       const batchNum = Math.floor(i / batchSize) + 1;
-      const totalBatches = Math.ceil(clientsArray.length / batchSize);
+      const totalBatches = Math.ceil(uniqueClientIds.length / batchSize);
 
       this.logger.log(`Processing batch ${batchNum}/${totalBatches} (${batch.length} clients)...`);
 
       // Параллельно добавляем всех клиентов в текущем батче
       const results = await Promise.allSettled(
-        batch.map(async (client) => {
+        batch.map(async (clientId) => {
           const xuiClient: XuiInboundClient = {
-            id: client.id,
-            email: `client-${client.id.slice(0, 8)}`,
+            id: clientId,
+            email: `client-${clientId.slice(0, 8)}`,
             flow: server.flow || '',
             totalGB: 0,
             expiryTime: 0, // бессрочно
@@ -473,9 +463,9 @@ export class XuiApiService {
 
           const added = await this.addClient(server, inboundId, xuiClient, cookie);
           if (!added) {
-            throw new Error(`Failed to add client ${client.id}`);
+            throw new Error(`Failed to add client ${clientId}`);
           }
-          return client.id;
+          return clientId;
         }),
       );
 
@@ -485,7 +475,7 @@ export class XuiApiService {
           successCount++;
         } else {
           failedCount++;
-          const clientId = batch[idx].id;
+          const clientId = batch[idx];
           const errorMsg = `Client ${clientId.slice(0, 8)}: ${result.reason?.message || 'Unknown error'}`;
           errors.push(errorMsg);
         }
