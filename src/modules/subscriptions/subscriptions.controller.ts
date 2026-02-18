@@ -77,4 +77,20 @@ export class SubscriptionsController {
       data: subscriptions,
     };
   }
+
+  @Get(':id/url')
+  @ApiOperation({ 
+    summary: 'Получить URL подписки', 
+    description: 'Возвращает полный URL подписки для клиента по ID подписки' 
+  })
+  @ApiParam({ name: 'id', description: 'ID подписки', example: 'uuid' })
+  @ApiResponse({ status: 200, description: 'URL подписки', schema: { example: { success: true, data: { subscriptionUrl: 'http://localhost:3000/sub/client-uuid' } } } })
+  async getSubscriptionUrl(@Param('id') id: string) {
+    const url = await this.subscriptionsService.getSubscriptionUrl(id);
+    
+    return {
+      success: true,
+      data: { subscriptionUrl: url },
+    };
+  }
 }

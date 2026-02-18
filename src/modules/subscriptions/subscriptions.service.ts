@@ -109,6 +109,22 @@ export class SubscriptionsService {
   }
 
   /**
+   * Получить URL подписки по ID подписки
+   */
+  async getSubscriptionUrl(subscriptionId: string): Promise<string> {
+    const subscription = await this.subscriptionRepo.findOne({
+      where: { id: subscriptionId },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    const baseUrl = this.configService.get<string>('app.baseUrl', 'http://localhost:3000');
+    return `${baseUrl}/sub/${subscription.clientId}`;
+  }
+
+  /**
    * Получить подписку (VLESS-ссылки) для клиента.
    * Возвращает ВСЕ активные сервера из всех пулов.
    * Формат: base64(lines of vless://) — стандарт для v2raytun, happ и т.д.
