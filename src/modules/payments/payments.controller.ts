@@ -76,12 +76,44 @@ export class PaymentsController {
       return res.send(`OK${InvId}`);
     }
 
-    // 4. Создаем подписку (преобразуем месяцы в дни: 1 месяц = 30 дней)
-    const result = await this.subscriptionsService.createSubscription({
-      telegramId: session.telegramId,
-      days: session.period * 30,
-      source: SubscriptionSource.BOT,
-    });
+    // 4. Проверяем есть ли активная подписка
+    const activeSubscription = await this.subscriptionsService.getActiveSubscriptionByTelegramId(
+      session.telegramId
+    );
+
+    let subscriptionUrl: string;
+    let result: any;
+
+    if (activeSubscription) {
+      // Продлеваем существующую подписку
+      const extended = await this.subscriptionsService.extendSubscription(
+        activeSubscription.id,
+        session.period * 30
+      );
+
+      this.logger.log(
+        `Extended subscription ${activeSubscription.id} for user ${session.telegramId} by ${session.period * 30} days`
+      );
+
+      const baseUrl = this.subscriptionsService['configService'].get<string>(
+        'app.baseUrl',
+        'http://localhost:3000'
+      );
+      subscriptionUrl = `${baseUrl}/sub/${extended.clientId}`;
+      result = { subscriptionUrl };
+    } else {
+      // Создаем новую подписку (преобразуем месяцы в дни: 1 месяц = 30 дней)
+      result = await this.subscriptionsService.createSubscription({
+        telegramId: session.telegramId,
+        days: session.period * 30,
+        source: SubscriptionSource.BOT,
+      });
+      subscriptionUrl = result.subscriptionUrl;
+
+      this.logger.log(
+        `Created new subscription for user ${session.telegramId}`
+      );
+    }
 
     // 5. Помечаем платеж как оплаченный
     await this.paymentsService.markPaid(InvId);
@@ -89,7 +121,7 @@ export class PaymentsController {
     // 6. Уведомляем пользователя
     await this.notificationService.notifyPaymentSuccess(
       session.telegramId,
-      result.subscriptionUrl,
+      subscriptionUrl,
       session.period,
     );
 

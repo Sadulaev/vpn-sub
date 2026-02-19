@@ -176,10 +176,27 @@ export class UserBotService {
    * Отправить главное меню
    */
   async sendMainMenu(ctx: MessageContext | CallbackContext): Promise<void> {
+    // Получаем telegramId в зависимости от типа контекста
+    let telegramId: string | undefined;
+    if ('message' in ctx && ctx.message?.from) {
+      telegramId = ctx.message.from.id.toString();
+    } else if ('callbackQuery' in ctx && ctx.callbackQuery?.from) {
+      telegramId = ctx.callbackQuery.from.id.toString();
+    }
+
+    // Проверяем есть ли активная подписка
+    let buttonText = "Приобрести VPN 🛜";
+    if (telegramId) {
+      const activeSubscription = await this.subscriptionsService.getActiveSubscriptionByTelegramId(telegramId);
+      if (activeSubscription) {
+        buttonText = "Продлить подписку 🔄";
+      }
+    }
+
     const buttons = Markup.inlineKeyboard(
       [
         {
-          text: "Приобрести VPN 🛜",
+          text: buttonText,
           callback_data: BotCallbacks.Subscriptions,
         },
         { text: "Моя подписка 🔑", callback_data: BotCallbacks.MySubscription },
@@ -468,6 +485,71 @@ export class UserBotService {
 
     this.logger.log(`Broadcast complete: ${sent} sent, ${failed} failed`);
     return { sent, failed, errors };
+  }
+
+  /**
+   * Отправить уведомление о скором окончании подписки
+   */
+  async notifySubscriptionExpiringSoon(telegramId: string, endDate: Date): Promise<boolean> {
+    try {
+      const message = 
+        `⚠️ <b>Ваша подписка скоро закончится!</b>\n\n` +
+        `📅 Дата окончания: ${endDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}\n\n` +
+        `💡 Продлите подписку прямо сейчас, чтобы не потерять доступ к VPN!`;
+
+      const buttons = Markup.inlineKeyboard([
+        { text: "Продлить подписку 🔄", callback_data: BotCallbacks.Subscriptions },
+      ]);
+
+      await this.bot.telegram.sendMessage(telegramId, message, {
+        parse_mode: 'HTML',
+        reply_markup: buttons.reply_markup,
+      });
+
+      this.logger.log(`Expiring notification sent to user ${telegramId}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to send expiring notification to ${telegramId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Отправить зазывающее сообщение пользователю с истекшей подпиской
+   */
+  async notifyInactiveUser(telegramId: string): Promise<boolean> {
+    try {
+      const message = 
+        `😔 <b>Мы скучаем по вам!</b>\n\n` +
+        `Ваша подписка на HyperVPN истекла.\n\n` +
+        `🎯 Возобновите подписку и снова наслаждайтесь:\n` +
+        `• Быстрым и стабильным соединением\n` +
+        `• Доступом ко всем серверам\n` +
+        `• Безлимитным трафиком\n\n` +
+        `💰 Специальное предложение для вас!`;
+
+      const buttons = Markup.inlineKeyboard([
+        { text: "Возобновить подписку 🚀", callback_data: BotCallbacks.Subscriptions },
+      ]);
+
+      await this.bot.telegram.sendMessage(telegramId, message, {
+        parse_mode: 'HTML',
+        reply_markup: buttons.reply_markup,
+      });
+
+      this.logger.log(`Reactivation message sent to user ${telegramId}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to send reactivation message to ${telegramId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Получить экземпляр бота для использования в других сервисах
+   */
+  getBot(): Telegraf {
+    return this.bot;
   }
 
   private getImageForPeriod(months: number): string {

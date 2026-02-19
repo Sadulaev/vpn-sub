@@ -329,6 +329,48 @@ export class SubscriptionsService {
   }
 
   /**
+   * Получить активную подписку по telegramId
+   */
+  async getActiveSubscriptionByTelegramId(telegramId: string): Promise<Subscription | null> {
+    return this.subscriptionRepo.findOne({
+      where: { 
+        telegramId, 
+        status: SubscriptionStatus.ACTIVE 
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Продлить подписку на указанное количество дней
+   */
+  async extendSubscription(subscriptionId: string, days: number): Promise<Subscription> {
+    const subscription = await this.subscriptionRepo.findOne({
+      where: { id: subscriptionId },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    // Продлеваем от текущей даты окончания
+    const newEndDate = new Date(subscription.endDate);
+    newEndDate.setDate(newEndDate.getDate() + days);
+
+    subscription.endDate = newEndDate;
+    subscription.days = subscription.days + days;
+    subscription.status = SubscriptionStatus.ACTIVE; // На случай если была истекшей
+
+    await this.subscriptionRepo.save(subscription);
+
+    this.logger.log(
+      `Subscription ${subscriptionId} extended by ${days} days. New end date: ${newEndDate.toISOString()}`
+    );
+
+    return subscription;
+  }
+
+  /**
    * Получить все подписки клиента по UUID
    */
   async getSubscriptionsByClientId(clientId: string): Promise<Subscription[]> {
