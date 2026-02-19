@@ -5,8 +5,8 @@ services:
     image: postgres:15-alpine
     container_name: hyper-vpn-db
     environment:
-      POSTGRES_USER: vpn
-      POSTGRES_PASSWORD: neron
+      POSTGRES_USER: posgtres
+      POSTGRES_PASSWORD: posgres
       POSTGRES_DB: hyper_vpn
     ports:
       - "5432:5432"
