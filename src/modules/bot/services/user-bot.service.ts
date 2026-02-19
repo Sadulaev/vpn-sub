@@ -125,7 +125,7 @@ export class UserBotService {
       // Создаем пробную подписку на 3 дня
       const result = await this.subscriptionsService.createSubscription({
         telegramId,
-        months: 0, // Специальное значение для пробного периода
+        days: 3, // Пробный период на 3 дня
         source: SubscriptionSource.BOT,
       });
 

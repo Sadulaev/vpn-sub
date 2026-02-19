@@ -48,9 +48,9 @@ export class Subscription {
   @Column({ type: 'text', nullable: true })
   note: string | null = null;
 
-  /** Период подписки в месяцах */
+  /** Период подписки в днях */
   @Column({ type: 'int' })
-  months!: number;
+  days!: number;
 
   @Column({ type: 'timestamptz' })
   startDate!: Date;

@@ -77,14 +77,9 @@ export class SubscriptionsService {
     const startDate = new Date();
     const endDate = new Date();
     
-    // Если months === 0, это пробный период на 3 дня
-    if (dto.months === 0) {
-      endDate.setDate(endDate.getDate() + 3);
-      this.logger.log(`Creating trial subscription for 3 days`);
-    } else {
-      endDate.setMonth(endDate.getMonth() + dto.months);
-      endDate.setDate(endDate.getDate() + 1); // +1 день запаса
-    }
+    // Добавляем указанное количество дней
+    endDate.setDate(endDate.getDate() + dto.days);
+    this.logger.log(`Creating subscription for ${dto.days} days`);
 
     const subscription = this.subscriptionRepo.create({
       clientId,
@@ -92,7 +87,7 @@ export class SubscriptionsService {
       status: SubscriptionStatus.ACTIVE,
       source: dto.source || SubscriptionSource.ADMIN,
       note: dto.note || null,
-      months: dto.months,
+      days: dto.days,
       startDate,
       endDate,
     });

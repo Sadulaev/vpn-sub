@@ -29,6 +29,7 @@ export class PaymentsService {
   async createSession(dto: CreatePaymentDto): Promise<PaymentSession> {
     const invId = Date.now().toString();
 
+    // Истечение
     const expiresAt = dto.ttlMinutes
       ? new Date(Date.now() + dto.ttlMinutes * 60_000)
       : null;
@@ -95,6 +96,22 @@ export class PaymentsService {
     const affected = result.affected || 0;
     if (affected > 0) {
       this.logger.log(`Cleaned up ${affected} expired sessions`);
+    }
+
+    return affected;
+  }
+
+  /**
+   * Удалить истекшие payment sessions (с expiresAt в прошлом)
+   */
+  async deleteExpiredSessions(): Promise<number> {
+    const result = await this.paymentRepository.delete({
+      expiresAt: LessThan(new Date()),
+    });
+
+    const affected = result.affected || 0;
+    if (affected > 0) {
+      this.logger.log(`Deleted ${affected} expired payment sessions`);
     }
 
     return affected;

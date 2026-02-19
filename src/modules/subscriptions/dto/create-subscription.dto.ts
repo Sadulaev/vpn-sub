@@ -21,12 +21,12 @@ export class CreateSubscriptionDto {
   @IsOptional()
   telegramId?: string;
 
-  /** Период подписки в месяцах */
-  @ApiProperty({ example: 1, description: 'Период подписки в месяцах (1-24)', minimum: 1, maximum: 24 })
+  /** Период подписки в днях */
+  @ApiProperty({ example: 30, description: 'Период подписки в днях (1-365)', minimum: 1, maximum: 365 })
   @IsInt()
   @Min(1)
-  @Max(24)
-  months!: number;
+  @Max(365)
+  days!: number;
 
   /** Источник создания подписки */
   @ApiPropertyOptional({ 

@@ -76,10 +76,10 @@ export class PaymentsController {
       return res.send(`OK${InvId}`);
     }
 
-    // 4. Создаем подписку
+    // 4. Создаем подписку (преобразуем месяцы в дни: 1 месяц = 30 дней)
     const result = await this.subscriptionsService.createSubscription({
       telegramId: session.telegramId,
-      months: session.period,
+      days: session.period * 30,
       source: SubscriptionSource.BOT,
     });
 

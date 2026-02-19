@@ -436,16 +436,47 @@ export class XuiApiService {
       return { total, success: 0, failed: total, errors: [error] };
     }
 
+    // Получаем существующих клиентов на сервере
+    const inboundsResponse = await this.getInbounds(server, cookie);
+    if (!inboundsResponse) {
+      const error = `Failed to get inbounds from server ${server.name}`;
+      this.logger.error(error);
+      return { total, success: 0, failed: total, errors: [error] };
+    }
+
+    const targetInbound = inboundsResponse.obj.find(inb => inb.id === inboundId);
+    const existingClientIds = new Set<string>();
+    
+    if (targetInbound) {
+      try {
+        const settings: XuiInboundSettings = JSON.parse(targetInbound.settings);
+        settings.clients.forEach(client => existingClientIds.add(client.id));
+        this.logger.log(`Found ${existingClientIds.size} existing clients on server ${server.name}`);
+      } catch (error) {
+        this.logger.warn(`Failed to parse inbound settings for server ${server.name}:`, error);
+      }
+    }
+
+    // Фильтруем только тех клиентов, которых нет на сервере
+    const clientsToAdd = uniqueClientIds.filter(id => !existingClientIds.has(id));
+    
+    this.logger.log(`Need to add ${clientsToAdd.length} new clients to ${server.name} (${existingClientIds.size} already exist)`);
+
+    if (clientsToAdd.length === 0) {
+      this.logger.log(`All active clients already exist on server ${server.name}`);
+      return { total, success: total, failed: 0, errors: [] };
+    }
+
     // Батчевая обработка клиентов
-    let successCount = 0;
+    let successCount = existingClientIds.size;
     let failedCount = 0;
     const errors: string[] = [];
 
     // Разбиваем на батчи
-    for (let i = 0; i < uniqueClientIds.length; i += batchSize) {
-      const batch = uniqueClientIds.slice(i, i + batchSize);
+    for (let i = 0; i < clientsToAdd.length; i += batchSize) {
+      const batch = clientsToAdd.slice(i, i + batchSize);
       const batchNum = Math.floor(i / batchSize) + 1;
-      const totalBatches = Math.ceil(uniqueClientIds.length / batchSize);
+      const totalBatches = Math.ceil(clientsToAdd.length / batchSize);
 
       this.logger.log(`Processing batch ${batchNum}/${totalBatches} (${batch.length} clients)...`);
 

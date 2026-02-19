@@ -68,7 +68,7 @@ export class SubscriptionsController {
     } 
   })
   async createSubscription(@Body() dto: CreateSubscriptionDto) {
-    this.logger.log(`Creating subscription for ${dto.months} months`);
+    this.logger.log(`Creating subscription for ${dto.days} days`);
 
     const result = await this.subscriptionsService.createSubscription(dto);
 

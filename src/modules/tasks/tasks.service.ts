@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SubscriptionsService } from '@modules/subscriptions';
+import { PaymentsService } from '@modules/payments';
 
 @Injectable()
 export class TasksService {
   private readonly logger = new Logger(TasksService.name);
 
-  constructor(private readonly subscriptionsService: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly paymentsService: PaymentsService,
+  ) {}
 
   /**
    * Обработка истёкших подписок
@@ -22,6 +26,12 @@ export class TasksService {
       this.logger.log(
         `Task completed: ${result.expired} subscriptions expired, ${result.clientsRemoved.length} clients removed from servers`,
       );
+
+      // Удаляем истекшие payment sessions
+      const deletedSessions = await this.paymentsService.deleteExpiredSessions();
+      if (deletedSessions > 0) {
+        this.logger.log(`Deleted ${deletedSessions} expired payment sessions`);
+      }
     } catch (error) {
       this.logger.error('Error processing expired subscriptions:', error);
     }
@@ -42,6 +52,12 @@ export class TasksService {
         this.logger.log(
           `Backup task found: ${result.expired} subscriptions expired, ${result.clientsRemoved.length} clients removed`,
         );
+      }
+
+      // Удаляем истекшие payment sessions
+      const deletedSessions = await this.paymentsService.deleteExpiredSessions();
+      if (deletedSessions > 0) {
+        this.logger.log(`Deleted ${deletedSessions} expired payment sessions`);
       }
     } catch (error) {
       this.logger.error('Error in backup task:', error);
