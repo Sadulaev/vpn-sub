@@ -107,6 +107,18 @@ export class ServerPoolsService {
   }
 
   /**
+   * Получить активные серверы конкретного пула
+   */
+  async findActiveServersByPoolId(poolId: number): Promise<XuiServer[]> {
+    return this.xuiServerRepo.find({
+      where: { 
+        serverPoolId: poolId,
+        status: XuiServerStatus.ACTIVE 
+      },
+    });
+  }
+
+  /**
    * Получить сервер по ID
    */
   async findServerById(id: number): Promise<XuiServer | null> {

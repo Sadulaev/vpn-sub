@@ -85,14 +85,14 @@ export default (): Config => ({
   },
   subscriptionPlans: {
     plans: [
-      // { months: 1, price: 189, label: '1 месяц - 189₽' },
-      // { months: 3, price: 449, label: '3 месяца - 449₽' },
-      // { months: 6, price: 699, label: '6 месяцев - 699₽' },
-      // { months: 12, price: 1499, label: '12 месяцев - 1499₽' },
-      { months: 1, price: 1, label: "1 месяц - 1₽" },
-      { months: 3, price: 2, label: "3 месяца - 2₽" },
-      { months: 6, price: 3, label: "6 месяцев - 3₽" },
-      { months: 12, price: 4, label: "12 месяцев - 4₽" },
+      { months: 1, price: 189, label: '1 месяц - 189₽' },
+      { months: 3, price: 449, label: '3 месяца - 449₽' },
+      { months: 6, price: 699, label: '6 месяцев - 699₽' },
+      { months: 12, price: 1499, label: '12 месяцев - 1499₽' },
+      // { months: 1, price: 1, label: "1 месяц - 1₽" },
+      // { months: 3, price: 2, label: "3 месяца - 2₽" },
+      // { months: 6, price: 3, label: "6 месяцев - 3₽" },
+      // { months: 12, price: 4, label: "12 месяцев - 4₽" },
     ],
   },
 });

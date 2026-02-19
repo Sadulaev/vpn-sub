@@ -4,7 +4,9 @@ import { Markup, Telegraf } from "telegraf";
 import { PaymentsService, RobokassaService } from "@modules/payments";
 import { GoogleSheetsService } from "@modules/google-sheets";
 import { SubscriptionsService } from "@modules/subscriptions";
-import { SubscriptionSource } from "@database/entities";
+import { ServerPoolsService } from "@modules/server-pools";
+import { XuiApiService } from "@modules/xui-api";
+import { SubscriptionSource, XuiServerStatus } from "@database/entities";
 import { BotCallbacks } from "../constants/callbacks";
 import { BotMessages } from "../constants/messages";
 import { MessageContext, CallbackContext } from "../types/context";
@@ -25,6 +27,10 @@ export class UserBotService {
     private readonly googleSheetsService: GoogleSheetsService,
     @Inject(forwardRef(() => SubscriptionsService))
     private readonly subscriptionsService: SubscriptionsService,
+    @Inject(forwardRef(() => ServerPoolsService))
+    private readonly serverPoolsService: ServerPoolsService,
+    @Inject(forwardRef(() => XuiApiService))
+    private readonly xuiApiService: XuiApiService,
   ) {
     const telegram = this.configService.get('telegram');
     const token = telegram?.userBotToken;
@@ -200,6 +206,10 @@ export class UserBotService {
           callback_data: BotCallbacks.Subscriptions,
         },
         { text: "Моя подписка 🔑", callback_data: BotCallbacks.MySubscription },
+        {
+          text: "Статистика серверов 📊",
+          callback_data: BotCallbacks.ServerStats,
+        },
         {
           text: "Инструкция установки 📍",
           callback_data: BotCallbacks.Instructions,
@@ -542,6 +552,72 @@ export class UserBotService {
     } catch (error) {
       this.logger.error(`Failed to send reactivation message to ${telegramId}:`, error);
       return false;
+    }
+  }
+
+  /**
+   * Получить и отправить статистику серверов
+   */
+  async handleServerStats(ctx: CallbackContext): Promise<void> {
+    await ctx.answerCbQuery();
+
+    try {
+      // Получаем все пулы
+      const pools = await this.serverPoolsService.findAllPools();
+
+      if (pools.length === 0) {
+        await ctx.reply('📊 Нет доступных пулов серверов');
+        return;
+      }
+
+      let messageText = '📊 <b>Статистика серверов</b>\n\n';
+
+      for (const pool of pools) {
+        // Получаем серверы пула
+        const servers = await this.serverPoolsService.findActiveServersByPoolId(pool.id);
+
+        if (servers.length === 0) {
+          continue;
+        }
+
+        let totalOnline = 0;
+        const serverNames: string[] = [];
+
+        // Для каждого сервера получаем количество онлайн пользователей
+        for (const server of servers) {
+          serverNames.push(server.name);
+
+          try {
+            const cookie = await this.xuiApiService.login(server);
+            if (cookie) {
+              const onlineResponse = await this.xuiApiService.getOnlineClients(server, cookie);
+              if (onlineResponse && onlineResponse.obj) {
+                totalOnline += onlineResponse.obj.length;
+              }
+            }
+          } catch (error) {
+            this.logger.error(`Failed to get online count for server ${server.name}:`, error);
+          }
+        }
+
+        // Формируем строку: Пул - количество онлайн\nсервер1 / сервер2 / сервер3
+        messageText += `<b>${pool.name}</b> - ${totalOnline} онлайн\n`;
+        messageText += `${serverNames.join(' / ')}\n\n`;
+      }
+
+      const backButton = Markup.inlineKeyboard([
+        { text: '◀️ Назад в меню', callback_data: BotCallbacks.Menu },
+      ]);
+
+      await ctx.reply(messageText, {
+        parse_mode: 'HTML',
+        reply_markup: backButton.reply_markup,
+      });
+
+      this.logger.log(`Server stats sent to user ${ctx.callbackQuery.from.id}`);
+    } catch (error) {
+      this.logger.error('Failed to get server stats:', error);
+      await ctx.reply('⚠️ Не удалось получить статистику серверов. Попробуйте позже.');
     }
   }
 
