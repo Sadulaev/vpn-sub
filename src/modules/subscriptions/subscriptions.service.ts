@@ -130,10 +130,10 @@ export class SubscriptionsService {
       query.andWhere('subscription.source = :source', { source: params.source });
     }
 
-    // Поиск по clientId или note
+    // Поиск только по clientId
     if (params.search) {
       query.andWhere(
-        '(subscription.clientId::text ILIKE :search OR subscription.note ILIKE :search)',
+        'subscription.clientId::text ILIKE :search',
         { search: `%${params.search}%` }
       );
     }

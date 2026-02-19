@@ -45,7 +45,7 @@ export class SubscriptionPublicController {
       res.setHeader('profile-title', 'base64:' + Buffer.from('Hyper-VPN').toString('base64'));
       
       // Интервал обновления (в часах)
-      res.setHeader('profile-update-interval', '6');
+      res.setHeader('profile-update-interval', '1');
       
       // Информация о подписке: трафик и дата окончания
       // Формат: upload=usedBytes; download=usedBytes; total=limitBytes (0=unlimited); expire=timestamp
