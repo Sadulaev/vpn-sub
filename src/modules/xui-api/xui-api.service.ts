@@ -158,18 +158,23 @@ export class XuiApiService {
     try {
       const url = this.buildUrl(server, '/panel/api/inbounds/onlines');
       const response = await fetch(url, {
-        method: 'GET',
-        headers: { Cookie: cookie },
+        method: 'POST',
+        headers: { 
+          'Cookie': cookie,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
-        throw new Error(`Get onlines failed with status: ${response.status}`);
+        this.logger.warn(`Get onlines failed with status: ${response.status}, trying fallback method`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      this.logger.debug(`Online clients response from ${server.name}:`, JSON.stringify(data));
+      return data;
     } catch (error) {
       this.logger.error(`Failed to get online clients from ${server.name}:`, error);
-      await this.markServerFailedIfDown(server, error);
       return null;
     }
   }
