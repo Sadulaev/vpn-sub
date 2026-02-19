@@ -133,7 +133,7 @@ export class SubscriptionsService {
     // Поиск по clientId или note
     if (params.search) {
       query.andWhere(
-        '(subscription.clientId ILIKE :search OR subscription.note ILIKE :search)',
+        '(subscription.clientId::text ILIKE :search OR subscription.note ILIKE :search)',
         { search: `%${params.search}%` }
       );
     }
