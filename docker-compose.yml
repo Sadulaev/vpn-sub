@@ -37,7 +37,6 @@ services:
       - "3000:3000"
     volumes:
       - ./sessions:/app/sessions
-      - ./data:/app/data
       - ./assets:/app/assets
     depends_on:
       postgres:
