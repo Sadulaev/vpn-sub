@@ -119,22 +119,54 @@ export class SubscriptionsController {
   @Post('send-message')
   @ApiOperation({ 
     summary: 'Отправить сообщение пользователям', 
-    description: 'Отправляет сообщение через Telegram бота. Если указан telegramId - отправляет одному пользователю, иначе - всем с активными подписками' 
+    description: 'Отправляет сообщение через Telegram бота. Если указан telegramId - отправляет одному пользователю синхронно, иначе - запускает массовую рассылку в фоне для всех уникальных пользователей из Google Sheets' 
   })
   @ApiBody({ type: SendMessageDto })
   @ApiResponse({ 
     status: 200, 
-    description: 'Результат отправки сообщений', 
+    description: 'Результат отправки сообщения (одному пользователю)', 
     schema: { 
       example: { 
         success: true, 
-        data: { sent: 10, failed: 0, errors: [] } 
+        data: { sent: 1, failed: 0, errors: [] } 
+      } 
+    } 
+  })
+  @ApiResponse({ 
+    status: 202, 
+    description: 'Массовая рассылка запущена в фоне', 
+    schema: { 
+      example: { 
+        success: true, 
+        message: 'Message broadcasting started in background. Check server logs for results.' 
       } 
     } 
   })
   async sendMessage(@Body() dto: SendMessageDto) {
-    this.logger.log(`Sending message${dto.telegramId ? ` to user ${dto.telegramId}` : ' to all users'}`);
-    
+    // Если рассылка массовая (без telegramId) - запускаем в фоне
+    if (!dto.telegramId) {
+      this.logger.log('Starting message broadcast to all users from Google Sheets (background process)');
+      
+      // Запускаем рассылку без await - в фоне
+      this.userBotService.sendMessage(dto.message, dto.telegramId)
+        .then(result => {
+          this.logger.log(
+            `Broadcast completed: ${result.sent} sent, ${result.failed} failed. ` +
+            `Errors: ${result.errors.length > 0 ? result.errors.slice(0, 5).join('; ') : 'none'}`
+          );
+        })
+        .catch(err => {
+          this.logger.error('Broadcast failed:', err);
+        });
+      
+      return {
+        success: true,
+        message: 'Message broadcasting started in background. Check server logs for results.',
+      };
+    }
+
+    // Для одиночного сообщения - отправляем синхронно
+    this.logger.log(`Sending message to user ${dto.telegramId}`);
     const result = await this.userBotService.sendMessage(dto.message, dto.telegramId);
     
     return {

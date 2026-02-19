@@ -430,7 +430,7 @@ export class UserBotService {
   /**
    * Отправить сообщение пользователям бота
    * @param message Текст сообщения
-   * @param telegramId Опционально: ID конкретного пользователя. Если не указан - всем пользователям
+   * @param telegramId Опционально: ID конкретного пользователя. Если не указан - всем из Google Sheets
    */
   async sendMessage(message: string, telegramId?: string): Promise<{
     sent: number;
@@ -459,17 +459,15 @@ export class UserBotService {
       }
     }
 
-    // Иначе - отправляем всем пользователям с активными подписками
-    const subscriptions = await this.subscriptionsService.findAll();
-    const uniqueTelegramIds = [
-      ...new Set(
-        subscriptions
-          .filter((sub) => sub.telegramId)
-          .map((sub) => sub.telegramId as string)
-      ),
-    ];
+    // Иначе - получаем все уникальные Telegram ID из Google Sheets
+    const uniqueTelegramIds = await this.googleSheetsService.getUniqueTelegramIds('Лист1');
+    
+    if (uniqueTelegramIds.length === 0) {
+      this.logger.warn('No Telegram IDs found in Google Sheets');
+      return { sent: 0, failed: 0, errors: ['No Telegram IDs found in Google Sheets'] };
+    }
 
-    this.logger.log(`Broadcasting message to ${uniqueTelegramIds.length} users...`);
+    this.logger.log(`Broadcasting message to ${uniqueTelegramIds.length} users from Google Sheets...`);
 
     let sent = 0;
     let failed = 0;
@@ -488,7 +486,7 @@ export class UserBotService {
       } catch (error) {
         failed++;
         const errorMsg = `Failed to send to ${userId}: ${error.message}`;
-        this.logger.error(errorMsg);
+        this.logger.warn(errorMsg); // Изменено на warn вместо error, так как игнорируем ошибки
         errors.push(errorMsg);
       }
     }
