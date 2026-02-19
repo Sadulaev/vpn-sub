@@ -16,9 +16,24 @@ export interface PoolWithBestServer {
   activeClients: number;
 }
 
+export interface SyncStatus {
+  serverId: number;
+  serverName: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'failed';
+  total: number;
+  processed: number;
+  success: number;
+  failed: number;
+  startedAt: Date;
+  completedAt?: Date;
+  estimatedTimeMs?: number;
+  error?: string;
+}
+
 @Injectable()
 export class ServerPoolsService {
   private readonly logger = new Logger(ServerPoolsService.name);
+  private syncStatuses = new Map<number, SyncStatus>();
 
   constructor(
     @InjectRepository(ServerPool)
@@ -192,13 +207,15 @@ export class ServerPoolsService {
   }
 
   /**
-   * Синхронизировать клиентов на сервере
+   * Синхронизировать клиентов на сервере (асинхронно)
+   * Запускает процесс в фоне и сразу возвращает статус
    */
   async syncServerClients(serverId: number): Promise<{
-    total: number;
-    success: number;
-    failed: number;
-    errors: string[];
+    status: 'started';
+    serverId: number;
+    serverName: string;
+    estimatedTimeMs: number;
+    message: string;
   }> {
     const server = await this.findServerById(serverId);
     
@@ -210,13 +227,105 @@ export class ServerPoolsService {
       throw new Error(`Server ${server.name} is not active`);
     }
 
-    const result = await this.xuiApi.syncAllActiveClientsToServer(server);
-    
-    this.logger.log(
-      `Server ${server.name} manual sync completed: ${result.success}/${result.total} clients synced`,
-    );
+    // Проверяем, не идет ли уже синхронизация
+    const existingSync = this.syncStatuses.get(serverId);
+    if (existingSync && (existingSync.status === 'pending' || existingSync.status === 'in-progress')) {
+      throw new Error(`Synchronization for server ${server.name} is already in progress`);
+    }
 
-    return result;
+    // Получаем количество активных клиентов для оценки времени
+    const activeCount = await this.xuiApi.getActiveClientsCountFromDB();
+    
+    // Расчет примерного времени:
+    // ~10 клиентов в батче, 3 параллельно, 1.5 сек между батчами
+    // ~0.15 сек на клиента + retry время
+    const estimatedTimeMs = Math.ceil(activeCount * 200); // 200ms на клиента с запасом
+
+    // Создаем начальный статус
+    const syncStatus: SyncStatus = {
+      serverId: server.id,
+      serverName: server.name,
+      status: 'pending',
+      total: activeCount,
+      processed: 0,
+      success: 0,
+      failed: 0,
+      startedAt: new Date(),
+      estimatedTimeMs,
+    };
+    
+    this.syncStatuses.set(serverId, syncStatus);
+
+    // Запускаем синхронизацию в фоне (без await)
+    this.executeSyncInBackground(server, syncStatus).catch(error => {
+      this.logger.error(`Background sync failed for server ${server.name}:`, error);
+    });
+
+    return {
+      status: 'started',
+      serverId: server.id,
+      serverName: server.name,
+      estimatedTimeMs,
+      message: `Synchronization started for ${activeCount} clients. Estimated time: ${Math.ceil(estimatedTimeMs / 1000)} seconds`,
+    };
+  }
+
+  /**
+   * Выполнить синхронизацию в фоновом режиме
+   */
+  private async executeSyncInBackground(server: XuiServer, syncStatus: SyncStatus): Promise<void> {
+    try {
+      syncStatus.status = 'in-progress';
+      this.syncStatuses.set(server.id, syncStatus);
+
+      const result = await this.xuiApi.syncAllActiveClientsToServer(server);
+      
+      syncStatus.status = 'completed';
+      syncStatus.processed = result.total;
+      syncStatus.success = result.success;
+      syncStatus.failed = result.failed;
+      syncStatus.completedAt = new Date();
+      
+      this.syncStatuses.set(server.id, syncStatus);
+
+      this.logger.log(
+        `Server ${server.name} background sync completed: ${result.success}/${result.total} clients synced`,
+      );
+    } catch (error) {
+      syncStatus.status = 'failed';
+      syncStatus.error = error?.message || 'Unknown error';
+      syncStatus.completedAt = new Date();
+      this.syncStatuses.set(server.id, syncStatus);
+      
+      this.logger.error(`Server ${server.name} background sync failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Получить статус синхронизации сервера
+   */
+  getSyncStatus(serverId: number): SyncStatus | null {
+    return this.syncStatuses.get(serverId) || null;
+  }
+
+  /**
+   * Получить все активные статусы синхронизации
+   */
+  getAllSyncStatuses(): SyncStatus[] {
+    return Array.from(this.syncStatuses.values());
+  }
+
+  /**
+   * Очистить статус синхронизации (для завершенных/неудачных)
+   */
+  clearSyncStatus(serverId: number): boolean {
+    const status = this.syncStatuses.get(serverId);
+    if (status && (status.status === 'completed' || status.status === 'failed')) {
+      this.syncStatuses.delete(serverId);
+      return true;
+    }
+    return false;
   }
 
   async updateServer(id: number, dto: UpdateServerDto): Promise<XuiServer> {

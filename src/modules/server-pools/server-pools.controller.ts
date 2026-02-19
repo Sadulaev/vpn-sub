@@ -114,25 +114,85 @@ export class ServerPoolsController {
 
   @Post('servers/:id/sync')
   @ApiOperation({ 
-    summary: 'Синхронизировать клиентов', 
-    description: 'Сравнивает все активные подписки с пользователями на сервере и добавляет отсутствующих' 
+    summary: 'Синхронизировать клиентов (асинхронно)', 
+    description: 'Запускает фоновую синхронизацию всех активных подписок на сервер. Сразу возвращает статус и примерное время выполнения.' 
   })
   @ApiParam({ name: 'id', description: 'ID сервера' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Синхронизация завершена',
+    description: 'Синхронизация запущена',
     schema: {
       example: {
-        total: 50,
-        success: 48,
-        failed: 2,
-        errors: ['Client abc123: Connection timeout']
+        status: 'started',
+        serverId: 1,
+        serverName: 'Germany-1',
+        estimatedTimeMs: 40000,
+        message: 'Synchronization started for 200 clients. Estimated time: 40 seconds'
       }
     }
   })
   @ApiResponse({ status: 404, description: 'Сервер не найден' })
+  @ApiResponse({ status: 400, description: 'Синхронизация уже запущена' })
   async syncServerClients(@Param('id', ParseIntPipe) id: number) {
     return this.serverPoolsService.syncServerClients(id);
+  }
+
+  @Get('servers/:id/sync-status')
+  @ApiOperation({ 
+    summary: 'Получить статус синхронизации', 
+    description: 'Возвращает текущий статус синхронизации сервера (in-progress, completed, failed)' 
+  })
+  @ApiParam({ name: 'id', description: 'ID сервера' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Статус синхронизации',
+    schema: {
+      example: {
+        serverId: 1,
+        serverName: 'Germany-1',
+        status: 'in-progress',
+        total: 200,
+        processed: 50,
+        success: 48,
+        failed: 2,
+        startedAt: '2026-02-20T10:00:00.000Z',
+        estimatedTimeMs: 40000
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: 'Статус синхронизации не найден' })
+  async getSyncStatus(@Param('id', ParseIntPipe) id: number) {
+    const status = this.serverPoolsService.getSyncStatus(id);
+    if (!status) {
+      return { message: 'No synchronization found for this server' };
+    }
+    return status;
+  }
+
+  @Get('sync-status/all')
+  @ApiOperation({ 
+    summary: 'Получить все статусы синхронизации', 
+    description: 'Возвращает статусы всех активных синхронизаций' 
+  })
+  @ApiResponse({ status: 200, description: 'Список всех статусов синхронизации' })
+  async getAllSyncStatuses() {
+    return this.serverPoolsService.getAllSyncStatuses();
+  }
+
+  @Delete('servers/:id/sync-status')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ 
+    summary: 'Очистить статус синхронизации', 
+    description: 'Удаляет статус завершённой или неудачной синхронизации из памяти' 
+  })
+  @ApiParam({ name: 'id', description: 'ID сервера' })
+  @ApiResponse({ status: 204, description: 'Статус успешно очищен' })
+  @ApiResponse({ status: 400, description: 'Невозможно удалить активную синхронизацию' })
+  async clearSyncStatus(@Param('id', ParseIntPipe) id: number) {
+    const cleared = this.serverPoolsService.clearSyncStatus(id);
+    if (!cleared) {
+      throw new Error('Cannot clear sync status: synchronization is in progress or not found');
+    }
   }
 
   // ─── Статистика ───

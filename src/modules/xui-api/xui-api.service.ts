@@ -21,6 +21,68 @@ export class XuiApiService {
     private readonly subscriptionRepo: Repository<Subscription>,
   ) {}
 
+  // ─── Вспомогательные методы ───
+
+  /**
+   * Задержка выполнения
+   */
+  private async sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Retry механизм с экспоненциальной задержкой
+   */
+  private async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelayMs: number = 1000,
+  ): Promise<T> {
+    let lastError: any;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        
+        if (attempt < maxRetries) {
+          const delay = baseDelayMs * Math.pow(2, attempt);
+          this.logger.warn(`Attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+          await this.sleep(delay);
+        }
+      }
+    }
+    
+    throw lastError;
+  }
+
+  /**
+   * Выполнить задачи с ограничением параллелизма
+   */
+  private async processWithConcurrencyLimit<T, R>(
+    items: T[],
+    processor: (item: T) => Promise<R>,
+    concurrencyLimit: number,
+  ): Promise<PromiseSettledResult<R>[]> {
+    const results: PromiseSettledResult<R>[] = [];
+    
+    for (let i = 0; i < items.length; i += concurrencyLimit) {
+      const chunk = items.slice(i, i + concurrencyLimit);
+      const chunkResults = await Promise.allSettled(
+        chunk.map(item => processor(item))
+      );
+      results.push(...chunkResults);
+      
+      // Небольшая задержка между чанками для снижения нагрузки
+      if (i + concurrencyLimit < items.length) {
+        await this.sleep(200);
+      }
+    }
+    
+    return results;
+  }
+
   // ─── Авторизация ───
 
   /**
@@ -89,26 +151,33 @@ export class XuiApiService {
     inboundId: number,
     client: XuiInboundClient,
     cookie: string,
+    retries: number = 3,
   ): Promise<boolean> {
     try {
-      const url = this.buildUrl(server, '/panel/api/inbounds/addClient');
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Cookie: cookie,
-        },
-        body: JSON.stringify({
-          id: inboundId,
-          settings: JSON.stringify({ clients: [client] }),
-        }),
-      });
+      return await this.retryWithBackoff(async () => {
+        const url = this.buildUrl(server, '/panel/api/inbounds/addClient');
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Cookie: cookie,
+          },
+          body: JSON.stringify({
+            id: inboundId,
+            settings: JSON.stringify({ clients: [client] }),
+          }),
+        });
 
-      if (!response.ok) {
-        throw new Error(`Add client failed with status: ${response.status}`);
-      }
+        if (!response.ok) {
+          // Для ошибок 500/429 (перегрузка) имеет смысл повторить
+          if (response.status === 500 || response.status === 429) {
+            throw new Error(`Server overloaded (${response.status}), will retry`);
+          }
+          throw new Error(`Add client failed with status: ${response.status}`);
+        }
 
-      return true;
+        return true;
+      }, retries);
     } catch (error) {
       this.logger.error(`Failed to add client to ${server.name} inbound ${inboundId}:`, error);
       await this.markServerFailedIfDown(server, error);
@@ -177,6 +246,19 @@ export class XuiApiService {
       this.logger.error(`Failed to get online clients from ${server.name}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Получить количество уникальных активных клиентов из БД
+   */
+  async getActiveClientsCountFromDB(): Promise<number> {
+    const activeSubscriptions = await this.subscriptionRepo.find({
+      where: { status: SubscriptionStatus.ACTIVE },
+    });
+    
+    // Удаляем дубликаты clientId
+    const uniqueClientIds = new Set(activeSubscriptions.map(sub => sub.clientId));
+    return uniqueClientIds.size;
   }
 
   /**
@@ -400,14 +482,19 @@ export class XuiApiService {
    * Используется при добавлении нового сервера в систему
    * 
    * @param server - Новый сервер для синхронизации
-   * @param batchSize - Размер батча для параллельной обработки (default: 50)
+   * @param batchSize - Размер батча (default: 10, уменьшено для предотвращения перегрузки сервера)
+   * @param concurrencyLimit - Максимальное кол-во параллельных запросов в батче (default: 3)
+   * @param delayBetweenBatchesMs - Задержка между батчами в мс (default: 1500)
    * @returns Статистика синхронизации
    */
   async syncAllActiveClientsToServer(
     server: XuiServer,
-    batchSize: number = 50,
+    batchSize: number = 10,
+    concurrencyLimit: number = 3,
+    delayBetweenBatchesMs: number = 1500,
   ): Promise<{ total: number; success: number; failed: number; errors: string[] }> {
     this.logger.log(`Starting sync of all active clients to server ${server.name} (id=${server.id})...`);
+    this.logger.log(`Settings: batchSize=${batchSize}, concurrency=${concurrencyLimit}, delay=${delayBetweenBatchesMs}ms`);
 
     // Получаем всех клиентов с активными подписками
     const activeSubscriptions = await this.subscriptionRepo.find({
@@ -485,9 +572,10 @@ export class XuiApiService {
 
       this.logger.log(`Processing batch ${batchNum}/${totalBatches} (${batch.length} clients)...`);
 
-      // Параллельно добавляем всех клиентов в текущем батче
-      const results = await Promise.allSettled(
-        batch.map(async (clientId: string) => {
+      // Добавляем клиентов с ограничением параллелизма
+      const results = await this.processWithConcurrencyLimit(
+        batch,
+        async (clientId: string) => {
           const xuiClient: XuiInboundClient = {
             id: clientId,
             email: `client-${clientId.slice(0, 8)}`,
@@ -502,7 +590,8 @@ export class XuiApiService {
             throw new Error(`Failed to add client ${clientId}`);
           }
           return clientId;
-        }),
+        },
+        concurrencyLimit,
       );
 
       // Подсчитываем результаты батча
@@ -520,6 +609,12 @@ export class XuiApiService {
       this.logger.log(
         `Batch ${batchNum}/${totalBatches} completed. Success: ${results.filter(r => r.status === 'fulfilled').length}, Failed: ${results.filter(r => r.status === 'rejected').length}`,
       );
+
+      // Задержка между батчами для снижения нагрузки на сервер
+      if (i + batchSize < clientsToAdd.length) {
+        this.logger.log(`Waiting ${delayBetweenBatchesMs}ms before next batch...`);
+        await this.sleep(delayBetweenBatchesMs);
+      }
     }
 
     this.logger.log(
