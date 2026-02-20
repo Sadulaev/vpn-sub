@@ -67,16 +67,20 @@ export class ServerPoolsController {
 
   @Post('servers')
   @ApiOperation({ 
-    summary: 'Добавить новый сервер', 
-    description: 'Создаёт новый XUI сервер с параметрами подключения к панели 3x-ui и настройками VLESS' 
+    summary: 'Добавить новый сервер (асинхронно)', 
+    description: 'Создаёт новый XUI сервер и запускает фоновую синхронизацию клиентов. Сразу возвращает сервер и статус синхронизации.' 
   })
   @ApiResponse({ 
     status: 201, 
-    description: 'Сервер успешно создан',
+    description: 'Сервер успешно создан, синхронизация запущена в фоне',
     schema: {
       example: {
-        server: { id: 1, name: 'Germany-1' },
-        syncResult: { total: 40, success: 38, failed: 2 }
+        server: { id: 1, name: 'Germany-1', status: 'active' },
+        syncStatus: { 
+          status: 'started', 
+          estimatedTimeMs: 8000, 
+          message: 'Synchronization started for 40 clients in background' 
+        }
       }
     }
   })

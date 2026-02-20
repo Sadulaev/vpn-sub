@@ -145,7 +145,11 @@ export class ServerPoolsService {
 
   async createServer(dto: CreateServerDto): Promise<{
     server: XuiServer;
-    syncResult: { total: number; success: number; failed: number };
+    syncStatus: {
+      status: 'started' | 'skipped';
+      estimatedTimeMs?: number;
+      message: string;
+    };
   }> {
     // Проверяем существование пула, если указан
     if (dto.serverPoolId) {
@@ -179,31 +183,49 @@ export class ServerPoolsService {
     const saved = await this.xuiServerRepo.save(server);
     this.logger.log(`Created server: ${saved.id} (${saved.name})`);
 
-    // Синхронизируем всех активных клиентов на новый сервер
-    let syncResult = { total: 0, success: 0, failed: 0 };
+    // Запускаем асинхронную синхронизацию всех активных клиентов на новый сервер
+    let syncStatus: { status: 'started' | 'skipped'; estimatedTimeMs?: number; message: string };
     
     if (saved.status === XuiServerStatus.ACTIVE) {
-      try {
-        const result = await this.xuiApi.syncAllActiveClientsToServer(saved);
-        syncResult = {
-          total: result.total,
-          success: result.success,
-          failed: result.failed,
-        };
-        this.logger.log(
-          `Server ${saved.name} sync completed: ${result.success}/${result.total} clients added successfully`,
-        );
-        if (result.failed > 0) {
-          this.logger.warn(
-            `Server ${saved.name} sync had ${result.failed} failures. First 5 errors: ${result.errors.slice(0, 5).join('; ')}`,
-          );
-        }
-      } catch (error) {
-        this.logger.error(`Failed to sync clients to new server ${saved.name}:`, error);
-      }
+      // Получаем количество активных клиентов для оценки времени
+      const activeCount = await this.xuiApi.getActiveClientsCountFromDB();
+      const estimatedTimeMs = Math.ceil(activeCount * 200); // 200ms на клиента
+
+      // Создаем начальный статус синхронизации
+      const syncStatusObj: SyncStatus = {
+        serverId: saved.id,
+        serverName: saved.name,
+        status: 'pending',
+        total: activeCount,
+        processed: 0,
+        success: 0,
+        failed: 0,
+        startedAt: new Date(),
+        estimatedTimeMs,
+      };
+      
+      this.syncStatuses.set(saved.id, syncStatusObj);
+
+      // Запускаем синхронизацию в фоне (без await)
+      this.executeSyncInBackground(saved, syncStatusObj).catch(error => {
+        this.logger.error(`Background sync failed for new server ${saved.name}:`, error);
+      });
+
+      syncStatus = {
+        status: 'started',
+        estimatedTimeMs,
+        message: `Synchronization started for ${activeCount} clients in background`,
+      };
+      
+      this.logger.log(`Started background sync for new server ${saved.name}: ${activeCount} clients`);
+    } else {
+      syncStatus = {
+        status: 'skipped',
+        message: 'Server is not active, sync skipped',
+      };
     }
 
-    return { server: saved, syncResult };
+    return { server: saved, syncStatus };
   }
 
   /**

@@ -191,26 +191,28 @@ export class SubscriptionsService {
       throw new NotFoundException('No active subscription');
     }
 
-    // Получаем ВСЕ пулы со всеми серверами
-    const allPools = await this.serverPoolsService.findAllPools();
+    // Получаем лучший (наименее нагруженный) сервер из каждого пула
+    const bestServersPerPool = await this.serverPoolsService.getBestServersPerPool();
 
     const vlessLinks: string[] = [];
-    const allActiveServers: XuiServer[] = [];
+    const selectedServers: XuiServer[] = [];
 
-    for (const pool of allPools) {
-      if (!pool.isActive) continue;
-      
-      // Берём все активные серверы пула
-      const activeServers = (pool.servers || []).filter(
-        (s) => s.status === XuiServerStatus.ACTIVE,
-      );
-
-      allActiveServers.push(...activeServers);
-
-      for (const server of activeServers) {
-        const vlessLink = this.xuiApi.buildVlessLink(server, clientUuid, pool.name);
-        vlessLinks.push(vlessLink);
+    for (const poolData of bestServersPerPool) {
+      // Пропускаем пулы без доступных серверов
+      if (!poolData.bestServer) {
+        this.logger.warn(`No available server in pool ${poolData.pool.name}`);
+        continue;
       }
+
+      selectedServers.push(poolData.bestServer);
+
+      // Генерируем VLESS ссылку для лучшего сервера этого пула
+      const vlessLink = this.xuiApi.buildVlessLink(
+        poolData.bestServer, 
+        clientUuid, 
+        poolData.pool.name
+      );
+      vlessLinks.push(vlessLink);
     }
 
     if (vlessLinks.length === 0) {
@@ -218,10 +220,13 @@ export class SubscriptionsService {
       return null;
     }
 
-    this.logger.log(`Generated ${vlessLinks.length} VLESS links for client ${clientUuid}`);
+    this.logger.log(
+      `Generated ${vlessLinks.length} VLESS links for client ${clientUuid} ` +
+      `(one per pool: ${bestServersPerPool.map(p => p.pool.name).join(', ')})`
+    );
 
-    // Получаем статистику трафика со всех серверов
-    const trafficStats = await this.xuiApi.getClientTrafficStats(clientUuid, allActiveServers);
+    // Получаем статистику трафика с выбранных серверов
+    const trafficStats = await this.xuiApi.getClientTrafficStats(clientUuid, selectedServers);
 
     // Возвращаем в формате base64 (стандарт подписок) + метаданные
     return {
