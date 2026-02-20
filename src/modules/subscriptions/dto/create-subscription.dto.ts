@@ -47,4 +47,18 @@ export class CreateSubscriptionDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  /** Лимит одновременных устройств */
+  @ApiPropertyOptional({ 
+    example: 3, 
+    description: 'Максимальное количество одновременно подключенных устройств (1-10)',
+    default: 3,
+    minimum: 1,
+    maximum: 10
+  })
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  @IsOptional()
+  deviceLimit?: number;
 }

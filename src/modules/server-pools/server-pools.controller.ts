@@ -195,6 +195,29 @@ export class ServerPoolsController {
     }
   }
 
+  @Post('servers/:id/migrate-emails')
+  @ApiOperation({ 
+    summary: 'Мигрировать email клиентов', 
+    description: 'Обновляет email всех клиентов на сервере с формата client-{uuid} на полный UUID для устранения коллизий' 
+  })
+  @ApiParam({ name: 'id', description: 'ID сервера' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Миграция завершена',
+    schema: {
+      example: {
+        total: 150,
+        updated: 148,
+        failed: 2,
+        errors: ['Client abc12345: failed to update']
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: 'Сервер не найден' })
+  async migrateServerEmails(@Param('id', ParseIntPipe) id: number) {
+    return this.serverPoolsService.migrateServerEmails(id);
+  }
+
   // ─── Статистика ───
 
   @Get('stats/load')

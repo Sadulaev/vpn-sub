@@ -9,6 +9,8 @@ import {
 import { ApiTags, ApiOperation, ApiParam, ApiResponse, ApiExcludeController } from '@nestjs/swagger';
 import { Response } from 'express';
 import { SubscriptionsService } from './subscriptions.service';
+import { XuiApiService } from '@modules/xui-api';
+import { ServerPoolsService } from '@modules/server-pools';
 
 // Публичный контроллер для v2ray клиентов (БЕЗ префикса /api)
 @ApiTags('Public Subscription')
@@ -16,7 +18,11 @@ import { SubscriptionsService } from './subscriptions.service';
 export class SubscriptionPublicController {
   private readonly logger = new Logger(SubscriptionPublicController.name);
 
-  constructor(private readonly subscriptionsService: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly xuiApiService: XuiApiService,
+    private readonly serverPoolsService: ServerPoolsService,
+  ) {}
 
   @Get(':clientId')
   @ApiOperation({ 
@@ -31,6 +37,35 @@ export class SubscriptionPublicController {
     @Res() res: Response,
   ) {
     try {
+      // Проверяем лимит устройств перед выдачей подписки
+      const subscription = await this.subscriptionsService.findByClientId(clientId);
+      
+      if (subscription && subscription.deviceLimit) {
+        const activeServers = await this.serverPoolsService.findAllActiveServers();
+        const onlineDevices = await this.xuiApiService.getOnlineDevicesCount(clientId, activeServers);
+        
+        if (onlineDevices >= subscription.deviceLimit) {
+          this.logger.warn(
+            `Device limit exceeded for client ${clientId.slice(0, 8)}: ${onlineDevices}/${subscription.deviceLimit}`
+          );
+          
+          // Возвращаем специальное сообщение вместо подписки
+          const errorMessage = Buffer.from(
+            `⚠️ Превышен лимит устройств\n\n` +
+            `Одновременно подключено: ${onlineDevices}\n` +
+            `Максимально разрешено: ${subscription.deviceLimit}\n\n` +
+            `Отключите другие устройства и попробуйте снова через несколько минут.`
+          ).toString('base64');
+          
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          return res.send(errorMessage);
+        }
+        
+        this.logger.debug(
+          `Device limit check passed for client ${clientId.slice(0, 8)}: ${onlineDevices}/${subscription.deviceLimit}`
+        );
+      }
+
       const result = await this.subscriptionsService.getSubscriptionContent(clientId);
 
       if (!result) {

@@ -221,6 +221,70 @@ export class XuiApiService {
   }
 
   /**
+   * Обновить email клиента в inbound
+   * Используется для миграции с короткого email на полный UUID
+   */
+  async updateClientEmail(
+    server: XuiServer,
+    inboundId: number,
+    clientUuid: string,
+    newEmail: string,
+    cookie: string,
+  ): Promise<boolean> {
+    try {
+      // Сначала получаем текущие настройки inbound
+      const inboundsResponse = await this.getInbounds(server, cookie);
+      if (!inboundsResponse) {
+        throw new Error('Failed to get inbounds');
+      }
+
+      const targetInbound = inboundsResponse.obj.find(inb => inb.id === inboundId);
+      if (!targetInbound) {
+        throw new Error(`Inbound ${inboundId} not found`);
+      }
+
+      const settings: XuiInboundSettings = JSON.parse(targetInbound.settings);
+      
+      // Находим клиента по UUID (id) и обновляем email
+      const client = settings.clients.find(c => c.id === clientUuid);
+      if (!client) {
+        this.logger.warn(`Client ${clientUuid} not found in inbound ${inboundId} on ${server.name}`);
+        return false;
+      }
+
+      const oldEmail = client.email;
+      client.email = newEmail;
+
+      // Обновляем inbound
+      const url = this.buildUrl(server, `/panel/api/inbounds/updateClient/${clientUuid}`);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: cookie,
+        },
+        body: JSON.stringify({
+          id: inboundId,
+          settings: JSON.stringify({ clients: [client] }),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Update client failed with status: ${response.status}`);
+      }
+
+      this.logger.log(
+        `Updated client ${clientUuid.slice(0, 8)} email: "${oldEmail}" → "${newEmail}" on ${server.name}`
+      );
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to update client email on ${server.name}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * Получить список онлайн клиентов на сервере
    */
   async getOnlineClients(server: XuiServer, cookie: string): Promise<XuiOnlinesResponse | null> {
@@ -274,6 +338,35 @@ export class XuiApiService {
     if (!onlines || !onlines.success) return null;
 
     return onlines.obj.length;
+  }
+
+  /**
+   * Получить количество онлайн устройств для конкретного clientId на всех серверах
+   * Используется для проверки лимита устройств
+   */
+  async getOnlineDevicesCount(clientId: string, servers: XuiServer[]): Promise<number> {
+    let totalOnline = 0;
+
+    for (const server of servers) {
+      try {
+        const cookie = await this.login(server);
+        if (!cookie) continue;
+
+        const onlines = await this.getOnlineClients(server, cookie);
+        if (!onlines || !onlines.success) continue;
+
+        // Считаем сколько раз clientId встречается в списке онлайн
+        // email теперь = полный UUID, поэтому сравниваем напрямую
+        const count = onlines.obj.filter(email => email === clientId).length;
+        totalOnline += count;
+
+        this.logger.debug(`Server ${server.name}: ${count} online devices for client ${clientId.slice(0, 8)}`);
+      } catch (error) {
+        this.logger.warn(`Failed to check online devices on ${server.name}:`, error);
+      }
+    }
+
+    return totalOnline;
   }
 
   /**
@@ -413,7 +506,7 @@ export class XuiApiService {
 
           const client: XuiInboundClient = {
             id: clientUuid,
-            email: `client-${clientUuid.slice(0, 8)}`,
+            email: clientUuid, // Полный UUID для уникальности
             flow: server.flow || '',
             totalGB: 0,
             expiryTime: 0, // бессрочно
@@ -578,7 +671,7 @@ export class XuiApiService {
         async (clientId: string) => {
           const xuiClient: XuiInboundClient = {
             id: clientId,
-            email: `client-${clientId.slice(0, 8)}`,
+            email: clientId, // Полный UUID для уникальности
             flow: server.flow || '',
             totalGB: 0,
             expiryTime: 0, // бессрочно
@@ -649,7 +742,7 @@ export class XuiApiService {
   }
 
   /**
-   * Пометить сервер как упавший только если ошибка похожа на сетевую
+   * Пометить сервер как упавший только если ошибка похожа на сetевую
    */
   private async markServerFailedIfDown(server: XuiServer, error: any): Promise<void> {
     const message = error?.message || '';
@@ -663,5 +756,93 @@ export class XuiApiService {
     if (isNetworkError) {
       await this.markServerFailed(server);
     }
+  }
+
+  // ─── Миграция ───
+
+  /**
+   * Мигрировать email клиентов с короткого формата на полный UUID
+   * Обновляет всех клиентов на сервере: client-{uuid} → полный uuid
+   */
+  async migrateClientEmails(server: XuiServer): Promise<{
+    total: number;
+    updated: number;
+    failed: number;
+    errors: string[];
+  }> {
+    this.logger.log(`Starting email migration for server ${server.name} (id=${server.id})...`);
+
+    const cookie = await this.login(server);
+    if (!cookie) {
+      const error = `Failed to login to server ${server.name}`;
+      this.logger.error(error);
+      return { total: 0, updated: 0, failed: 0, errors: [error] };
+    }
+
+    const inboundId = await this.resolveInboundId(server, cookie);
+    if (!inboundId) {
+      const error = `No inbound found for server ${server.name}`;
+      this.logger.error(error);
+      return { total: 0, updated: 0, failed: 0, errors: [error] };
+    }
+
+    const inboundsResponse = await this.getInbounds(server, cookie);
+    if (!inboundsResponse) {
+      const error = `Failed to get inbounds from server ${server.name}`;
+      this.logger.error(error);
+      return { total: 0, updated: 0, failed: 0, errors: [error] };
+    }
+
+    const targetInbound = inboundsResponse.obj.find(inb => inb.id === inboundId);
+    if (!targetInbound) {
+      const error = `Inbound ${inboundId} not found on server ${server.name}`;
+      this.logger.error(error);
+      return { total: 0, updated: 0, failed: 0, errors: [error] };
+    }
+
+    const settings: XuiInboundSettings = JSON.parse(targetInbound.settings);
+    const clientsToMigrate = settings.clients.filter(client => {
+      // Находим клиентов где email != полный UUID
+      return client.email !== client.id && client.email.startsWith('client-');
+    });
+
+    const total = clientsToMigrate.length;
+
+    if (total === 0) {
+      this.logger.log(`No clients to migrate on ${server.name} (all already use full UUID)`);
+      return { total: 0, updated: 0, failed: 0, errors: [] };
+    }
+
+    this.logger.log(`Found ${total} clients to migrate on ${server.name}`);
+
+    let updated = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const client of clientsToMigrate) {
+      const success = await this.updateClientEmail(
+        server,
+        inboundId,
+        client.id,
+        client.id, // Новый email = полный UUID
+        cookie,
+      );
+
+      if (success) {
+        updated++;
+      } else {
+        failed++;
+        errors.push(`Client ${client.id.slice(0, 8)}: failed to update`);
+      }
+
+      // Небольшая задержка между обновлениями
+      await this.sleep(100);
+    }
+
+    this.logger.log(
+      `Migration completed on ${server.name}: ${updated}/${total} clients updated, ${failed} failed`,
+    );
+
+    return { total, updated, failed, errors };
   }
 }

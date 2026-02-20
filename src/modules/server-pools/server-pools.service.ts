@@ -328,6 +328,30 @@ export class ServerPoolsService {
     return false;
   }
 
+  /**
+   * Мигрировать email клиентов на сервере с короткого формата на полный UUID
+   */
+  async migrateServerEmails(serverId: number): Promise<{
+    total: number;
+    updated: number;
+    failed: number;
+    errors: string[];
+  }> {
+    const server = await this.findServerById(serverId);
+    
+    if (!server) {
+      throw new NotFoundException(`Server with ID ${serverId} not found`);
+    }
+
+    const result = await this.xuiApi.migrateClientEmails(server);
+    
+    this.logger.log(
+      `Server ${server.name} email migration completed: ${result.updated}/${result.total} clients updated`,
+    );
+
+    return result;
+  }
+
   async updateServer(id: number, dto: UpdateServerDto): Promise<XuiServer> {
     const server = await this.xuiServerRepo.findOne({ where: { id } });
     if (!server) {

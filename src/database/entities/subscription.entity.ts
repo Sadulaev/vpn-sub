@@ -52,6 +52,10 @@ export class Subscription {
   @Column({ type: 'int' })
   days!: number;
 
+  /** Лимит одновременных устройств */
+  @Column({ type: 'int', default: 3 })
+  deviceLimit!: number;
+
   @Column({ type: 'timestamptz' })
   startDate!: Date;
 

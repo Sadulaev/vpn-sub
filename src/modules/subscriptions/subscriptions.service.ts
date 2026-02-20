@@ -88,6 +88,7 @@ export class SubscriptionsService {
       source: dto.source || SubscriptionSource.ADMIN,
       note: dto.note || null,
       days: dto.days,
+      deviceLimit: dto.deviceLimit || 3,
       startDate,
       endDate,
     });
@@ -113,6 +114,18 @@ export class SubscriptionsService {
   async findAll(): Promise<Subscription[]> {
     return this.subscriptionRepo.find({
       order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Получить активную подписку по clientId
+   */
+  async findByClientId(clientId: string): Promise<Subscription | null> {
+    return this.subscriptionRepo.findOne({
+      where: { 
+        clientId,
+        status: SubscriptionStatus.ACTIVE,
+      },
     });
   }
 
